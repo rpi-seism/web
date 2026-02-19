@@ -68,7 +68,20 @@ export class Dashboard implements OnInit {
       aspectRatio: 1.2,
       animation: false,
       scales: {
-        x: { display: false },
+        x: { 
+          display: true, 
+          title: {
+            display: true,
+            text: 'Frequency (Hz)',
+            color: '#64748b'
+          },
+          ticks: {
+            color: '#64748b',
+            autoSkip: true, // Crucial: prevents 256 labels from overlapping
+            maxTicksLimit: 10 // Shows about 10 frequency markers across the bottom
+          },
+          grid: { display: false }
+        },
         y: { 
           type: 'linear', // Change to 'logarithmic' to see low-level noise
           grid: { color: '#1e293b' },
@@ -81,7 +94,7 @@ export class Dashboard implements OnInit {
   }
 
   updateChart(msg: SensorData) {
-    const { channel, data, timestamp } = msg;
+    const { channel, data, fs, timestamp } = msg;
 
     // Initialize channel if it's the first time we see it
     if (!this.channels[channel]) {
@@ -106,7 +119,7 @@ export class Dashboard implements OnInit {
       this.channels[channel] = { ...this.channels[channel] };
 
       // Compute FFT from the updated time-domain window
-      this.updateFFT(channel, dataset.data);
+      this.updateFFT(channel, fs, dataset.data);
 
       this.cdref.detectChanges();
     });
@@ -137,30 +150,35 @@ export class Dashboard implements OnInit {
     };
   }
 
-  private updateFFT(channel: string, timeData: number[]) {
-    if (timeData.length < this.MAX_POINTS) return;
+private updateFFT(channel: string, fs: number, timeData: number[]) {
+  if (timeData.length < this.MAX_POINTS) return;
 
-    const fft = new FFT(this.MAX_POINTS);
-    const out = fft.createComplexArray();
-    const dataInput = fft.toComplexArray(timeData, null);
-    
-    fft.transform(out, dataInput);
+  const fft = new FFT(this.MAX_POINTS);
+  const out = fft.createComplexArray();
+  const dataInput = fft.toComplexArray(timeData, null);
+  fft.transform(out, dataInput);
 
-    // Magnitude = sqrt(re^2 + im^2)
-    const magnitudes = [];
-    for (let i = 0; i < this.MAX_POINTS / 2; i++) {
-      const real = out[2 * i];
-      const imag = out[2 * i + 1];
-      magnitudes.push(Math.sqrt(real * real + imag * imag));
-    }
+  const magnitudes = [];
+  const labels = [];
+  const numBins = this.MAX_POINTS / 2;
 
-    // Update the FFT chart reference
-    this.fftChannels[channel] = {
-      ...this.fftChannels[channel],
-      datasets: [{
-        ...this.fftChannels[channel].datasets[0],
-        data: magnitudes
-      }]
-    };
+  for (let i = 0; i < numBins; i++) {
+    const real = out[2 * i];
+    const imag = out[2 * i + 1];
+    magnitudes.push(Math.sqrt(real * real + imag * imag));
+
+    // Calculate Frequency for this bin: (index * sampleRate) / totalPoints
+    const freq = (i * fs) / this.MAX_POINTS;
+    labels.push(freq.toFixed(1) + ' Hz'); 
   }
+
+  this.fftChannels[channel] = {
+    ...this.fftChannels[channel],
+    labels: labels, // <--- Update the labels here
+    datasets: [{
+      ...this.fftChannels[channel].datasets[0],
+      data: magnitudes
+    }]
+  };
+}
 }
