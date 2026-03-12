@@ -1,9 +1,13 @@
-import { ChangeDetectorRef, Component, NgZone, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, ElementRef, OnInit, QueryList, ViewChildren } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { WebsocketService } from '../services/websocket-service';
 import { ChartModule } from 'primeng/chart';
 import { SensorData } from '../entities/sensor_data';
 import FFT from 'fft.js';
+
+interface SpectrogramFrame {
+  magnitudes: number[];
+}
 
 @Component({
   selector: 'app-dashboard',
@@ -12,30 +16,37 @@ import FFT from 'fft.js';
   imports: [CommonModule, ChartModule]
 })
 export class Dashboard implements OnInit {
-  // Data stores
   channels: { [key: string]: any } = {};
   fftChannels: { [key: string]: any } = {};
   lastTimestamp: { [key: string]: string } = {};
   channelKeys: string[] = [];
+  spectrogramFrames: { [key: string]: SpectrogramFrame[] } = {};
 
-  // Connection state
   wsState: 'connecting' | 'live' | 'disconnected' = 'connecting';
+  fftLogarithmic = false;
 
-  // Chart Configurations
   chartOptions: any;
   fftOptions: any;
 
-  // Constants - FFT works best with powers of 2
   readonly WINDOW_SIZE = 512;
   readonly MAX_POINTS = 512;
+  readonly SPECTROGRAM_HISTORY = 300;
 
-  // Cached FFT instances — one per channel, allocated once
+  @ViewChildren('spectrogramCanvas') spectrogramCanvases!: QueryList<ElementRef<HTMLCanvasElement>>;
+
   private fftInstances: { [key: string]: FFT } = {};
+  private colourMap: string[] = [];
+
+  // fs is only known after the first packet — store it per channel
+  // so labels can be (re)built correctly
+  private channelFs: { [key: string]: number } = {};
 
   constructor(
     private dataService: WebsocketService,
     private cdref: ChangeDetectorRef,
-  ) {}
+  ) {
+    this.buildColourMap();
+  }
 
   ngOnInit() {
     this.initChartOptions();
@@ -56,12 +67,29 @@ export class Dashboard implements OnInit {
     });
   }
 
+  // ─── FFT scale toggle ────────────────────────────────────────────────────────
+
+  toggleFftScale() {
+    this.fftLogarithmic = !this.fftLogarithmic;
+    this.fftOptions = {
+      ...this.fftOptions,
+      scales: {
+        ...this.fftOptions.scales,
+        y: {
+          ...this.fftOptions.scales.y,
+          type: this.fftLogarithmic ? 'logarithmic' : 'linear'
+        }
+      }
+    };
+    this.cdref.detectChanges();
+  }
+
+  // ─── Chart options ───────────────────────────────────────────────────────────
+
   private initChartOptions() {
-    // Waveform Options
     this.chartOptions = {
       responsive: true,
       maintainAspectRatio: false,
-      aspectRatio: 1.2,
       animation: false,
       elements: { point: { radius: 0 }, line: { borderWidth: 1.5, tension: 0 } },
       scales: {
@@ -75,25 +103,15 @@ export class Dashboard implements OnInit {
       plugins: { legend: { display: false } }
     };
 
-    // FFT Spectrum Options
     this.fftOptions = {
       responsive: true,
       maintainAspectRatio: false,
-      aspectRatio: 1.2,
       animation: false,
       scales: {
         x: {
           display: true,
-          title: {
-            display: true,
-            text: 'Frequency (Hz)',
-            color: '#64748b'
-          },
-          ticks: {
-            color: '#64748b',
-            autoSkip: true,
-            maxTicksLimit: 10
-          },
+          title: { display: true, text: 'Frequency (Hz)', color: '#64748b' },
+          ticks: { color: '#64748b', autoSkip: true, maxTicksLimit: 10 },
           grid: { display: false }
         },
         y: {
@@ -107,39 +125,53 @@ export class Dashboard implements OnInit {
     };
   }
 
+  // ─── Incoming data ───────────────────────────────────────────────────────────
+
   updateChart(msg: SensorData) {
     const { channel, data, fs, timestamp } = msg;
 
-    // Initialize channel structures on first packet
-    if (!this.channels[channel]) {
+    // Guard: skip packet if fs is missing or zero — labels would be NaN
+    if (!fs || isNaN(fs) || fs <= 0) {
+      console.warn('[dashboard] packet rejected — invalid fs:', fs, msg);
+      return;
+    }
+
+    const isNewChannel = !this.channels[channel];
+    if (isNewChannel) {
       this.channelKeys.push(channel);
+      this.channelFs[channel] = fs;
       this.initializeChannelArrays(channel, fs);
     }
 
     this.lastTimestamp[channel] = timestamp;
     const dataset = this.channels[channel].datasets[0];
 
-    // Append new samples — avoid spread into push which can overflow the call
-    // stack for large payloads
     for (const v of data) dataset.data.push(v);
 
-    // Maintain sliding window
     if (dataset.data.length > this.WINDOW_SIZE) {
       dataset.data = dataset.data.slice(-this.WINDOW_SIZE);
     }
 
-    // Trigger immutable reference update so PrimeNG detects the change
     this.channels[channel] = { ...this.channels[channel] };
 
-    // Compute FFT from the updated time-domain window
-    this.updateFFT(channel, dataset.data);
+    const magnitudes = this.updateFFT(channel, dataset.data);
 
-    // Manual change detection — no need to also wrap in ngZone.run()
+    // ── detectChanges FIRST so the canvas is in the DOM before we draw ──
+    // For a brand-new channel the @ViewChildren QueryList is not updated
+    // until Angular runs change detection, so renderSpectrogram would find
+    // no canvas element if called before this point.
     this.cdref.detectChanges();
+
+    if (magnitudes) {
+      this.pushSpectrogramFrame(channel, magnitudes);
+      this.renderSpectrogram(channel);
+    }
   }
 
+  // ─── Channel initialisation ──────────────────────────────────────────────────
+
   private initializeChannelArrays(channel: string, fs: number) {
-    // Pre-compute frequency-axis labels once — they never change for a given fs
+    // fs is validated before this call — no NaN risk here
     const fftLabels = Array.from(
       { length: this.MAX_POINTS / 2 },
       (_, i) => ((i * fs) / this.MAX_POINTS).toFixed(1) + ' Hz'
@@ -147,11 +179,7 @@ export class Dashboard implements OnInit {
 
     this.channels[channel] = {
       labels: new Array(this.WINDOW_SIZE).fill(''),
-      datasets: [{
-        data: [],
-        borderColor: '#3b82f6',
-        fill: false
-      }]
+      datasets: [{ data: [], borderColor: '#3b82f6', fill: false }]
     };
 
     this.fftChannels[channel] = {
@@ -165,37 +193,37 @@ export class Dashboard implements OnInit {
         borderWidth: 1
       }]
     };
+
+    this.spectrogramFrames[channel] = [];
   }
+
+  // ─── FFT ─────────────────────────────────────────────────────────────────────
 
   private applyHannWindow(data: number[]): number[] {
     const N = data.length;
     return data.map((v, i) => v * 0.5 * (1 - Math.cos((2 * Math.PI * i) / (N - 1))));
   }
 
-  private updateFFT(channel: string, timeData: number[]) {
-    if (timeData.length < this.MAX_POINTS) return;
+  private updateFFT(channel: string, timeData: number[]): number[] | null {
+    if (timeData.length < this.MAX_POINTS) return null;
 
-    // Reuse FFT instance per channel — avoids re-allocating on every packet
     if (!this.fftInstances[channel]) {
       this.fftInstances[channel] = new FFT(this.MAX_POINTS);
     }
     const fft = this.fftInstances[channel];
 
     const out = fft.createComplexArray();
-
-    // Apply Hann window to reduce spectral leakage before transforming
     const windowed = this.applyHannWindow(timeData.slice(-this.MAX_POINTS));
-    const dataInput = fft.toComplexArray(windowed, null);
-    fft.transform(out, dataInput);
+    fft.transform(out, fft.toComplexArray(windowed, null));
 
-    const magnitudes = new Array(this.MAX_POINTS / 2);
-    for (let i = 0; i < this.MAX_POINTS / 2; i++) {
+    const numBins = this.MAX_POINTS / 2;
+    const magnitudes = new Array(numBins);
+    for (let i = 0; i < numBins; i++) {
       const real = out[2 * i];
       const imag = out[2 * i + 1];
       magnitudes[i] = Math.sqrt(real * real + imag * imag);
     }
 
-    // Only update the dataset — labels are stable and set once at init
     this.fftChannels[channel] = {
       ...this.fftChannels[channel],
       datasets: [{
@@ -203,5 +231,75 @@ export class Dashboard implements OnInit {
         data: magnitudes
       }]
     };
+
+    return magnitudes;
+  }
+
+  // ─── Spectrogram ─────────────────────────────────────────────────────────────
+
+  private pushSpectrogramFrame(channel: string, magnitudes: number[]) {
+    const frames = this.spectrogramFrames[channel];
+    frames.push({ magnitudes: [...magnitudes] });
+    if (frames.length > this.SPECTROGRAM_HISTORY) {
+      frames.shift();
+    }
+  }
+
+  renderSpectrogram(channel: string) {
+    const idx = this.channelKeys.indexOf(channel);
+    const canvasEl = this.spectrogramCanvases?.toArray()[idx]?.nativeElement;
+    if (!canvasEl) return;
+
+    const ctx = canvasEl.getContext('2d');
+    if (!ctx) return;
+
+    const frames = this.spectrogramFrames[channel];
+    if (frames.length === 0) return;
+
+    const numBins = this.MAX_POINTS / 2;
+    const canvasW = canvasEl.width;
+    const canvasH = canvasEl.height;
+    const colW = canvasW / this.SPECTROGRAM_HISTORY;
+    const rowH = canvasH / numBins;
+
+    let globalMax = 0;
+    for (const frame of frames) {
+      for (const m of frame.magnitudes) {
+        if (m > globalMax) globalMax = m;
+      }
+    }
+    if (globalMax === 0) return;
+
+    ctx.clearRect(0, 0, canvasW, canvasH);
+
+    const startX = (this.SPECTROGRAM_HISTORY - frames.length) * colW;
+
+    for (let t = 0; t < frames.length; t++) {
+      const x = startX + t * colW;
+      const { magnitudes } = frames[t];
+
+      for (let b = 0; b < numBins; b++) {
+        const y = canvasH - (b + 1) * rowH;
+        const norm = magnitudes[b] / globalMax;
+        ctx.fillStyle = this.colourMap[Math.min(255, Math.floor(norm * 255))];
+        ctx.fillRect(x, y, Math.ceil(colW) + 1, Math.ceil(rowH) + 1);
+      }
+    }
+  }
+
+  private buildColourMap() {
+    this.colourMap = Array.from({ length: 256 }, (_, i) => {
+      const t = i / 255;
+      const r = Math.round(255 * Math.min(1, Math.max(0,
+        t < 0.5 ? 2 * t * 0.7 : 0.7 + (t - 0.5) * 2 * 0.6
+      )));
+      const g = Math.round(255 * Math.min(1, Math.max(0,
+        t < 0.4 ? 0 : (t - 0.4) * (1 / 0.6)
+      )));
+      const b = Math.round(255 * Math.min(1, Math.max(0,
+        t < 0.3 ? t * (1 / 0.3) * 0.7 : 0.7 * (1 - (t - 0.3) * (1 / 0.7))
+      )));
+      return `rgb(${r},${g},${b})`;
+    });
   }
 }
