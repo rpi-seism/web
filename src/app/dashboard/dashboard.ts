@@ -18,6 +18,9 @@ export class Dashboard implements OnInit {
   lastTimestamp: { [key: string]: string } = {};
   channelKeys: string[] = [];
 
+  // Connection state
+  wsState: 'connecting' | 'live' | 'disconnected' = 'connecting';
+
   // Chart Configurations
   chartOptions: any;
   fftOptions: any;
@@ -26,19 +29,30 @@ export class Dashboard implements OnInit {
   readonly WINDOW_SIZE = 512;
   readonly MAX_POINTS = 512;
 
+  // Cached FFT instances — one per channel, allocated once
+  private fftInstances: { [key: string]: FFT } = {};
+
   constructor(
     private dataService: WebsocketService,
-    private ngZone: NgZone,
     private cdref: ChangeDetectorRef,
   ) {}
 
   ngOnInit() {
     this.initChartOptions();
-    
-    // Subscribe to the Python WebSocket stream
+
     this.dataService.getMessages().subscribe({
-      next: (msg: SensorData) => this.updateChart(msg),
-      error: (err) => console.error('WebSocket Error:', err)
+      next: (msg: SensorData) => {
+        this.wsState = 'live';
+        this.updateChart(msg);
+      },
+      error: () => {
+        this.wsState = 'disconnected';
+        this.cdref.detectChanges();
+      },
+      complete: () => {
+        this.wsState = 'disconnected';
+        this.cdref.detectChanges();
+      }
     });
   }
 
@@ -52,8 +66,8 @@ export class Dashboard implements OnInit {
       elements: { point: { radius: 0 }, line: { borderWidth: 1.5, tension: 0 } },
       scales: {
         x: { display: false },
-        y: { 
-          grid: { color: '#1e293b' }, 
+        y: {
+          grid: { color: '#1e293b' },
           ticks: { color: '#64748b' },
           border: { display: false }
         }
@@ -68,8 +82,8 @@ export class Dashboard implements OnInit {
       aspectRatio: 1.2,
       animation: false,
       scales: {
-        x: { 
-          display: true, 
+        x: {
+          display: true,
           title: {
             display: true,
             text: 'Frequency (Hz)',
@@ -77,13 +91,13 @@ export class Dashboard implements OnInit {
           },
           ticks: {
             color: '#64748b',
-            autoSkip: true, // Crucial: prevents 256 labels from overlapping
-            maxTicksLimit: 10 // Shows about 10 frequency markers across the bottom
+            autoSkip: true,
+            maxTicksLimit: 10
           },
           grid: { display: false }
         },
-        y: { 
-          type: 'linear', // Change to 'logarithmic' to see low-level noise
+        y: {
+          type: 'linear',
           grid: { color: '#1e293b' },
           ticks: { display: false },
           border: { display: false }
@@ -96,37 +110,41 @@ export class Dashboard implements OnInit {
   updateChart(msg: SensorData) {
     const { channel, data, fs, timestamp } = msg;
 
-    // Initialize channel if it's the first time we see it
+    // Initialize channel structures on first packet
     if (!this.channels[channel]) {
       this.channelKeys.push(channel);
-      this.initializeChannelArrays(channel);
+      this.initializeChannelArrays(channel, fs);
     }
 
     this.lastTimestamp[channel] = timestamp;
     const dataset = this.channels[channel].datasets[0];
-    
-    // Append new data (using spread because data is a list from Python)
-    dataset.data.push(...data);
-    
+
+    // Append new samples — avoid spread into push which can overflow the call
+    // stack for large payloads
+    for (const v of data) dataset.data.push(v);
+
     // Maintain sliding window
     if (dataset.data.length > this.WINDOW_SIZE) {
       dataset.data = dataset.data.slice(-this.WINDOW_SIZE);
     }
-    
-    // Run update inside Angular Zone for UI responsiveness
-    this.ngZone.run(() => {
-      // Refresh Waveform Reference
-      this.channels[channel] = { ...this.channels[channel] };
 
-      // Compute FFT from the updated time-domain window
-      this.updateFFT(channel, fs, dataset.data);
+    // Trigger immutable reference update so PrimeNG detects the change
+    this.channels[channel] = { ...this.channels[channel] };
 
-      this.cdref.detectChanges();
-    });
+    // Compute FFT from the updated time-domain window
+    this.updateFFT(channel, dataset.data);
+
+    // Manual change detection — no need to also wrap in ngZone.run()
+    this.cdref.detectChanges();
   }
 
-  private initializeChannelArrays(channel: string) {
-    // Initial waveform structure
+  private initializeChannelArrays(channel: string, fs: number) {
+    // Pre-compute frequency-axis labels once — they never change for a given fs
+    const fftLabels = Array.from(
+      { length: this.MAX_POINTS / 2 },
+      (_, i) => ((i * fs) / this.MAX_POINTS).toFixed(1) + ' Hz'
+    );
+
     this.channels[channel] = {
       labels: new Array(this.WINDOW_SIZE).fill(''),
       datasets: [{
@@ -136,9 +154,8 @@ export class Dashboard implements OnInit {
       }]
     };
 
-    // Initial FFT structure
     this.fftChannels[channel] = {
-      labels: new Array(this.MAX_POINTS / 2).fill(''),
+      labels: fftLabels,
       datasets: [{
         data: [],
         borderColor: '#f59e0b',
@@ -150,35 +167,41 @@ export class Dashboard implements OnInit {
     };
   }
 
-private updateFFT(channel: string, fs: number, timeData: number[]) {
-  if (timeData.length < this.MAX_POINTS) return;
-
-  const fft = new FFT(this.MAX_POINTS);
-  const out = fft.createComplexArray();
-  const dataInput = fft.toComplexArray(timeData, null);
-  fft.transform(out, dataInput);
-
-  const magnitudes = [];
-  const labels = [];
-  const numBins = this.MAX_POINTS / 2;
-
-  for (let i = 0; i < numBins; i++) {
-    const real = out[2 * i];
-    const imag = out[2 * i + 1];
-    magnitudes.push(Math.sqrt(real * real + imag * imag));
-
-    // Calculate Frequency for this bin: (index * sampleRate) / totalPoints
-    const freq = (i * fs) / this.MAX_POINTS;
-    labels.push(freq.toFixed(1) + ' Hz'); 
+  private applyHannWindow(data: number[]): number[] {
+    const N = data.length;
+    return data.map((v, i) => v * 0.5 * (1 - Math.cos((2 * Math.PI * i) / (N - 1))));
   }
 
-  this.fftChannels[channel] = {
-    ...this.fftChannels[channel],
-    labels: labels, // <--- Update the labels here
-    datasets: [{
-      ...this.fftChannels[channel].datasets[0],
-      data: magnitudes
-    }]
-  };
-}
+  private updateFFT(channel: string, timeData: number[]) {
+    if (timeData.length < this.MAX_POINTS) return;
+
+    // Reuse FFT instance per channel — avoids re-allocating on every packet
+    if (!this.fftInstances[channel]) {
+      this.fftInstances[channel] = new FFT(this.MAX_POINTS);
+    }
+    const fft = this.fftInstances[channel];
+
+    const out = fft.createComplexArray();
+
+    // Apply Hann window to reduce spectral leakage before transforming
+    const windowed = this.applyHannWindow(timeData.slice(-this.MAX_POINTS));
+    const dataInput = fft.toComplexArray(windowed, null);
+    fft.transform(out, dataInput);
+
+    const magnitudes = new Array(this.MAX_POINTS / 2);
+    for (let i = 0; i < this.MAX_POINTS / 2; i++) {
+      const real = out[2 * i];
+      const imag = out[2 * i + 1];
+      magnitudes[i] = Math.sqrt(real * real + imag * imag);
+    }
+
+    // Only update the dataset — labels are stable and set once at init
+    this.fftChannels[channel] = {
+      ...this.fftChannels[channel],
+      datasets: [{
+        ...this.fftChannels[channel].datasets[0],
+        data: magnitudes
+      }]
+    };
+  }
 }
