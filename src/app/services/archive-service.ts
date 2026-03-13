@@ -28,11 +28,19 @@ export class ArchiveService {
   }
 
   public getWaveform(channel: string, start: string, end: string, units: string = 'COUNTS') {
-  const params = new HttpParams()
-    .set('channel', channel)
-    .set('start', start)
-    .set('end', end)
-    .set('units', units);
-  return this.http.get<any>(`${this.API}/archive/waveform`, { params });
-}
+    const params = new HttpParams()
+      .set('channel', channel)
+      .set('start', start)
+      .set('end', end)
+      .set('units', units);
+    return this.http.get<any>(`${this.API}/archive/waveform`, { params });
+  }
+
+  public downloadMseed(channel: string, date: string): void {
+    const params = new HttpParams()
+      .set('channel', channel)
+      .set('date', date);
+    const url = `${this.API}/archive/download?${params.toString()}`;
+    window.open(url, '_blank');
+  }
 }

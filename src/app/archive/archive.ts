@@ -156,6 +156,10 @@ export class Archive implements OnInit {
     this.fetchWaveform();
   }
 
+  downloadMseed(ev: ArchiveEvent) {
+    this.archiveService.downloadMseed(ev.channel, ev.date);
+  }
+
   // ── Side-effect handlers ───────────────────────────────────────────────────
 
   onChannelChange() {
