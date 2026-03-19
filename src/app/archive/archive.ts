@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { ChartModule } from 'primeng/chart';
+import { forkJoin } from 'rxjs';
 import { ArchiveService } from '../services/archive-service';
 
 interface WaveformResponse {
@@ -16,6 +17,12 @@ interface WaveformResponse {
   npts_raw:     number;
   npts_display: number;
   data:         number[];
+}
+
+interface WaveformResult {
+  res:         WaveformResponse;
+  chartData:   any;
+  chartOptions: any;
 }
 
 interface ArchiveEvent {
@@ -32,26 +39,21 @@ interface ArchiveEvent {
   imports: [CommonModule, FormsModule, ChartModule, RouterModule],
 })
 export class Archive implements OnInit {
-  // ── Selectors ──────────────────────────────────────────────────────────────
-  availableChannels: string[] = [];
-  availableDays:     string[] = [];
+  availableChannels: string[]       = [];
+  availableDays:     string[]       = [];
   events:            ArchiveEvent[] = [];
 
-  selectedChannel = '';
-  selectedDate    = '';
-  startTime       = '00:00:00';
-  endTime         = '00:05:00';
-  selectedUnits   = 'COUNTS';
+  selectedChannels: string[] = [];
+  selectedDate     = '';
+  startTime        = '00:00:00';
+  endTime          = '00:05:00';
+  selectedUnits    = 'COUNTS';
 
-  // ── Status ─────────────────────────────────────────────────────────────────
   loadingWaveform  = false;
   loadingEvents    = false;
   error            = '';
 
-  // ── Chart ──────────────────────────────────────────────────────────────────
-  chartData:    any = null;
-  chartOptions: any = null;
-  waveformMeta: Partial<WaveformResponse> = {};
+  waveformResults: WaveformResult[] = [];
 
   constructor(
     private archiveService: ArchiveService,
@@ -59,18 +61,15 @@ export class Archive implements OnInit {
   ) {}
 
   ngOnInit() {
-    this.initChartOptions();
     this.loadChannels();
   }
-
-  // ── Loaders ────────────────────────────────────────────────────────────────
 
   loadChannels() {
     this.archiveService.getAvailableChannels().subscribe({
       next: channels => {
         this.availableChannels = channels;
         if (channels.length > 0) {
-          this.selectedChannel = channels[0];
+          this.selectedChannels = [channels[0]];
           this.loadDays();
         }
         this.cdref.detectChanges();
@@ -83,9 +82,10 @@ export class Archive implements OnInit {
   }
 
   loadDays() {
-    if (!this.selectedChannel) return;
+    const ch = this.selectedChannels[0];
+    if (!ch) return;
 
-    this.archiveService.getAvailableDays(this.selectedChannel).subscribe({
+    this.archiveService.getAvailableDays(ch).subscribe({
       next: days => {
         this.availableDays = days;
         this.selectedDate  = days.at(-1) ?? '';
@@ -102,10 +102,11 @@ export class Archive implements OnInit {
   }
 
   loadEvents() {
-    if (!this.selectedChannel || !this.selectedDate) return;
+    const ch = this.selectedChannels[0];
+    if (!ch || !this.selectedDate) return;
 
     this.loadingEvents = true;
-    this.archiveService.getEvents(this.selectedChannel, this.selectedDate).subscribe({
+    this.archiveService.getEvents(ch, this.selectedDate).subscribe({
       next: (evs: any[]) => {
         this.events        = evs;
         this.loadingEvents = false;
@@ -119,22 +120,39 @@ export class Archive implements OnInit {
     });
   }
 
-  // ── Waveform fetch ─────────────────────────────────────────────────────────
+  toggleChannel(ch: string) {
+    if (this.selectedChannels.includes(ch)) {
+      this.selectedChannels = this.selectedChannels.filter(c => c !== ch);
+    } else {
+      this.selectedChannels = [...this.selectedChannels, ch];
+    }
+  }
+
+  isChannelSelected(ch: string): boolean {
+    return this.selectedChannels.includes(ch);
+  }
 
   fetchWaveform() {
-    if (!this.selectedChannel || !this.selectedDate) return;
+    if (!this.selectedChannels.length || !this.selectedDate) return;
 
-    this.error          = '';
+    this.error           = '';
     this.loadingWaveform = true;
-    this.chartData      = null;
+    this.waveformResults = [];
 
-    const start = `${this.selectedDate}T${this.startTime}`;
-    const end   = `${this.selectedDate}T${this.endTime}`;
+    const start = `${this.selectedDate}T${this.startTime}Z`;
+    const end   = `${this.selectedDate}T${this.endTime}Z`;
 
-    this.archiveService.getWaveform(this.selectedChannel, start, end, this.selectedUnits).subscribe({
-      next: (res: WaveformResponse) => {
-        this.waveformMeta    = res;
-        this.buildChart(res);
+    const requests = this.selectedChannels.map(ch =>
+      this.archiveService.getWaveform(ch, start, end, this.selectedUnits)
+    );
+
+    forkJoin(requests).subscribe({
+      next: (responses: WaveformResponse[]) => {
+        this.waveformResults = responses.map(res => ({
+          res,
+          chartData:    this.buildChartData(res),
+          chartOptions: this.buildChartOptions(res),
+        }));
         this.loadingWaveform = false;
         this.cdref.detectChanges();
       },
@@ -146,13 +164,13 @@ export class Archive implements OnInit {
     });
   }
 
-  // ── Quick-load from event row ──────────────────────────────────────────────
-
   loadEvent(ev: ArchiveEvent) {
-    this.selectedChannel = ev.channel;
-    this.selectedDate    = ev.date;
-    this.startTime       = '00:00:00';
-    this.endTime         = '23:59:59';
+    if (!this.selectedChannels.includes(ev.channel)) {
+      this.selectedChannels = [ev.channel];
+    }
+    this.selectedDate = ev.date;
+    this.startTime    = '00:00:00';
+    this.endTime      = '23:59:59';
     this.fetchWaveform();
   }
 
@@ -160,12 +178,9 @@ export class Archive implements OnInit {
     this.archiveService.downloadMseed(ev.channel, ev.date);
   }
 
-  // ── Side-effect handlers ───────────────────────────────────────────────────
-
-  onChannelChange() {
-    this.chartData    = null;
-    this.waveformMeta = {};
-    this.events       = [];
+  onChannelToggle() {
+    this.waveformResults = [];
+    this.events          = [];
     this.loadDays();
   }
 
@@ -173,10 +188,29 @@ export class Archive implements OnInit {
     this.loadEvents();
   }
 
-  // ── Chart ──────────────────────────────────────────────────────────────────
+  private buildChartData(res: WaveformResponse): any {
+    const toUtcMs = (s: string) => new Date(s.endsWith('Z') ? s : s + 'Z').getTime();
+    const t0   = toUtcMs(res.starttime);
+    const t1   = toUtcMs(res.endtime);
+    const n    = res.data.length;
+    const step = n > 1 ? (t1 - t0) / (n - 1) : 0;
 
-  private initChartOptions() {
-    this.chartOptions = {
+    const labels = Array.from({ length: n }, (_, i) =>
+      new Date(t0 + i * step).toISOString().substring(11, 23)
+    );
+
+    return {
+      labels,
+      datasets: [{
+        data:        res.data,
+        borderColor: '#3b82f6',
+        fill:        false,
+      }],
+    };
+  }
+
+  private buildChartOptions(res: WaveformResponse): any {
+    return {
       responsive:          true,
       maintainAspectRatio: false,
       animation:           false,
@@ -195,52 +229,17 @@ export class Archive implements OnInit {
           grid:   { color: '#1e293b' },
           ticks:  { color: '#64748b' },
           border: { display: false },
-          title:  { display: true, text: 'counts', color: '#475569' },
+          title:  { display: true, text: res.units, color: '#475569' },
         },
       },
       plugins: { legend: { display: false } },
     };
   }
 
-  private buildChart(res: WaveformResponse) {
-    const t0   = new Date(res.starttime).getTime();
-    const t1   = new Date(res.endtime).getTime();
-    const n    = res.data.length;
-    const step = n > 1 ? (t1 - t0) / (n - 1) : 0;
-
-    const labels = Array.from({ length: n }, (_, i) =>
-      new Date(t0 + i * step).toISOString().substring(11, 23)
-    );
-
-    this.chartData = {
-      labels,
-      datasets: [{
-        data:        res.data,
-        borderColor: '#3b82f6',
-        fill:        false,
-      }],
-    };
-
-    // Update Y axis label to match the units returned by the API
-    this.chartOptions = {
-      ...this.chartOptions,
-      scales: {
-        ...this.chartOptions.scales,
-        y: {
-          ...this.chartOptions.scales.y,
-          title: { display: true, text: res.units, color: '#475569' },
-        },
-      },
-    };
-  }
-
-  // ── Helpers ────────────────────────────────────────────────────────────────
-
-  formatDuration(): string {
-    if (!this.waveformMeta.starttime || !this.waveformMeta.endtime) return '';
+  formatDuration(wr: WaveformResult): string {
     const sec = (
-      new Date(this.waveformMeta.endtime).getTime() -
-      new Date(this.waveformMeta.starttime).getTime()
+      new Date(wr.res.endtime).getTime() -
+      new Date(wr.res.starttime).getTime()
     ) / 1000;
     return sec >= 60 ? `${(sec / 60).toFixed(1)} min` : `${sec.toFixed(1)} s`;
   }
