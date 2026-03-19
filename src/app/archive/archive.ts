@@ -101,24 +101,28 @@ export class Archive implements OnInit {
     });
   }
 
-  loadEvents() {
-    const ch = this.selectedChannels[0];
-    if (!ch || !this.selectedDate) return;
+loadEvents() {
+  if (!this.selectedChannels.length || !this.selectedDate) return;
 
-    this.loadingEvents = true;
-    this.archiveService.getEvents(ch, this.selectedDate).subscribe({
-      next: (evs: any[]) => {
-        this.events        = evs;
-        this.loadingEvents = false;
-        this.cdref.detectChanges();
-      },
-      error: () => {
-        this.events        = [];
-        this.loadingEvents = false;
-        this.cdref.detectChanges();
-      },
-    });
-  }
+  this.loadingEvents = true;
+  
+  const requests = this.selectedChannels.map(ch =>
+    this.archiveService.getEvents(ch, this.selectedDate)
+  );
+
+  forkJoin(requests).subscribe({
+    next: (results: any[][]) => {
+      this.events        = results.flat().sort((a, b) => a.filename.localeCompare(b.filename));
+      this.loadingEvents = false;
+      this.cdref.detectChanges();
+    },
+    error: () => {
+      this.events        = [];
+      this.loadingEvents = false;
+      this.cdref.detectChanges();
+    },
+  });
+}
 
   toggleChannel(ch: string) {
     if (this.selectedChannels.includes(ch)) {
