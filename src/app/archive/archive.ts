@@ -5,32 +5,8 @@ import { RouterModule } from '@angular/router';
 import { ChartModule } from 'primeng/chart';
 import { forkJoin } from 'rxjs';
 import { ArchiveService } from '../services/archive-service';
+import { BookmarkService } from '../services/bookmark-service';
 
-interface WaveformResponse {
-  channel:      string;
-  network:      string;
-  station:      string;
-  units:        string;
-  fs:           number;
-  starttime:    string;
-  endtime:      string;
-  npts_raw:     number;
-  npts_display: number;
-  data:         number[];
-}
-
-interface WaveformResult {
-  res:         WaveformResponse;
-  chartData:   any;
-  chartOptions: any;
-}
-
-interface ArchiveEvent {
-  date:     string;
-  channel:  string;
-  filename: string;
-  size_kb:  number;
-}
 
 @Component({
   selector: 'app-archive',
@@ -42,6 +18,9 @@ export class Archive implements OnInit {
   availableChannels: string[]       = [];
   availableDays:     string[]       = [];
   events:            ArchiveEvent[] = [];
+
+  bookmarks: Bookmark[] = [];
+  bookmarkLabel = '';
 
   selectedChannels: string[] = [];
   selectedDate     = '';
@@ -57,11 +36,13 @@ export class Archive implements OnInit {
 
   constructor(
     private archiveService: ArchiveService,
+    private bookmarkService: BookmarkService,
     private cdref: ChangeDetectorRef,
   ) {}
 
   ngOnInit() {
     this.loadChannels();
+    this.loadBookmarks();
   }
 
   loadChannels() {
@@ -246,5 +227,69 @@ loadEvents() {
       new Date(wr.res.starttime).getTime()
     ) / 1000;
     return sec >= 60 ? `${(sec / 60).toFixed(1)} min` : `${sec.toFixed(1)} s`;
+  }
+
+  loadBookmarks() {
+    this.bookmarkService.getBookmarks().subscribe({
+      next: (bms: any[]) => {
+        this.bookmarks = bms.map(bm => ({
+          ...bm,
+          start:   new Date(bm.start.endsWith('Z') ? bm.start : bm.start + 'Z'),
+          end:     new Date(bm.end.endsWith('Z')   ? bm.end   : bm.end   + 'Z'),
+          savedAt: new Date(bm.saved_at.endsWith('Z') ? bm.saved_at : bm.saved_at + 'Z'),
+        }));
+        this.cdref.detectChanges();
+      },
+    });
+  }
+
+  loadBookmark(bm: Bookmark) {
+    // extract date (YYYY-MM-DD) and time (HH:mm:ss) from the Date objects
+    this.selectedChannels = [...bm.channels];
+    this.selectedDate     = bm.start.toISOString().substring(0, 10);
+    this.startTime        = bm.start.toISOString().substring(11, 19);
+    this.endTime          = bm.end.toISOString().substring(11, 19);
+    this.selectedUnits    = bm.units;
+    this.loadDays();
+    this.fetchWaveform();
+  }
+
+  saveBookmark() {
+    if (!this.selectedChannels.length || !this.selectedDate) return;
+
+    const payload = {
+      label:    this.bookmarkLabel.trim() || `${this.selectedDate} ${this.startTime}`,
+      channels: [...this.selectedChannels],
+      start:    new Date(`${this.selectedDate}T${this.startTime}Z`),
+      end:      new Date(`${this.selectedDate}T${this.endTime}Z`),
+      units:    this.selectedUnits,
+    };
+
+    this.bookmarkService.saveBookmark(payload).subscribe({
+      next: (saved: any) => {
+        const bm: Bookmark = {
+          ...saved,
+          start:   new Date(saved.start),
+          end:     new Date(saved.end),
+          savedAt: new Date(saved.savedAt ?? saved.saved_at),
+        };
+        this.bookmarks     = [bm, ...this.bookmarks];
+        this.bookmarkLabel = '';
+        this.cdref.detectChanges();
+      },
+    });
+  }
+
+  deleteBookmark(id: string) {
+    this.bookmarkService.deleteBookmark(id).subscribe({
+      next: () => {
+        this.bookmarks = this.bookmarks.filter(b => b.id !== id);
+        this.cdref.detectChanges();
+      },
+    });
+  }
+
+  bookmarkDate(bm: Bookmark): string {
+    return bm.start.toISOString().substring(0, 10);
   }
 }

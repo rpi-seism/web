@@ -194,5 +194,66 @@
       </div>
     }
 
+    
+    <!-- Save bookmark -->
+    <div class="bg-slate-900 rounded-3xl p-6 border border-slate-800 shadow-2xl">
+      <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">Bookmark current view</p>
+      <div class="flex gap-3 items-center">
+        <input
+          type="text"
+          [(ngModel)]="bookmarkLabel"
+          placeholder="Label (e.g. possible M2.1)"
+          class="flex-1 bg-slate-800 border border-slate-700 text-slate-200 text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-blue-500"
+        />
+        <button
+          (click)="saveBookmark()"
+          [disabled]="!selectedChannels.length || !selectedDate"
+          class="h-10 px-5 rounded-xl font-bold text-sm uppercase tracking-widest transition-colors
+                 bg-amber-600 hover:bg-amber-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed"
+        >
+          ★ Save
+        </button>
+      </div>
+    </div>
+    
+    <!-- Bookmark list -->
+    @if (bookmarks.length > 0) {
+      <div class="bg-slate-900 rounded-3xl p-6 border border-slate-800 shadow-2xl">
+        <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">
+          Bookmarks ({{ bookmarks.length }})
+        </p>
+        <div class="flex flex-col gap-2">
+          @for (bm of bookmarks; track bm.id) {
+            <div class="flex items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-800/50 border border-slate-700/50 hover:border-slate-600 group transition-colors">
+              <div class="flex flex-col gap-0.5 min-w-0">
+                <span class="text-sm font-bold text-slate-200 truncate">{{ bm.label }}</span>
+                <span class="text-xs font-mono text-slate-500">
+                  {{ bm.start }} → {{ bm.end }} UTC ·
+                  <span class="text-blue-400">{{ bm.channels.join(', ') }}</span> ·
+                  {{ bm.units }}
+                </span>
+              </div>
+              <div class="flex gap-2 shrink-0">
+                <button
+                  (click)="loadBookmark(bm)"
+                  class="text-[10px] font-bold text-blue-400 hover:text-blue-300 uppercase tracking-widest
+                         px-2 py-1 rounded border border-blue-700/50 hover:border-blue-500 transition-colors"
+                >
+                  Load
+                </button>
+                <button
+                  (click)="deleteBookmark(bm.id)"
+                  class="text-[10px] font-bold text-red-500 hover:text-red-400 uppercase tracking-widest
+                         px-2 py-1 rounded border border-red-900/50 hover:border-red-700 transition-colors
+                         opacity-0 group-hover:opacity-100"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+    }
   </div>
 </div>
