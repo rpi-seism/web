@@ -200,7 +200,7 @@ export class Archive implements OnInit {
     }
     this.selectedDate = ev.date;
     this.startTime    = '00:00:00';
-    this.endTime      = '23:59:59';
+    this.endTime      = '00:30:00';
     this.fetchWaveform();
   }
 
