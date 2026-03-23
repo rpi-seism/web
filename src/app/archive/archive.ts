@@ -1,77 +1,73 @@
 import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
-import { RouterModule } from '@angular/router';
-import { ChartModule } from 'primeng/chart';
-import { forkJoin } from 'rxjs';
+import { CommonModule }                         from '@angular/common';
+import { FormsModule }                          from '@angular/forms';
+import { RouterModule, ActivatedRoute }         from '@angular/router';
+import { ChartModule }                          from 'primeng/chart';
+import { concat, of } from 'rxjs';
+import { catchError, toArray } from 'rxjs/operators';
 import { ArchiveService } from '../services/archive-service';
-
-interface WaveformResponse {
-  channel:      string;
-  network:      string;
-  station:      string;
-  units:        string;
-  fs:           number;
-  starttime:    string;
-  endtime:      string;
-  npts_raw:     number;
-  npts_display: number;
-  data:         number[];
-}
-
-interface WaveformResult {
-  res:         WaveformResponse;
-  chartData:   any;
-  chartOptions: any;
-}
-
-interface ArchiveEvent {
-  date:     string;
-  channel:  string;
-  filename: string;
-  size_kb:  number;
-}
+import { BookmarkService }                      from '../services/bookmark-service';
+import { WaveformResponse } from '../entities/waveform-response';
+import { ArchiveEvent } from '../entities/archive-event';
+import { WaveformResult } from '../entities/waveform-result';
+import { Bookmark } from '../entities/bookmark';
 
 @Component({
-  selector: 'app-archive',
-  standalone: true,
+  selector:    'app-archive',
+  standalone:  true,
   templateUrl: './archive.html',
-  imports: [CommonModule, FormsModule, ChartModule, RouterModule],
+  imports:     [CommonModule, FormsModule, ChartModule, RouterModule],
 })
 export class Archive implements OnInit {
+
   availableChannels: string[]       = [];
   availableDays:     string[]       = [];
   events:            ArchiveEvent[] = [];
 
-  selectedChannels: string[] = [];
-  selectedDate     = '';
-  startTime        = '00:00:00';
-  endTime          = '00:05:00';
-  selectedUnits    = 'COUNTS';
+  allBookmarks:  Bookmark[] = [];
+  dayBookmarks:  Bookmark[] = [];
+  bookmarkLabel: string     = '';
 
-  loadingWaveform  = false;
-  loadingEvents    = false;
-  error            = '';
+  selectedChannels: string[] = [];
+  selectedDate      = '';
+  startTime         = '00:00:00';
+  endTime           = '00:05:00';
+  selectedUnits     = 'COUNTS';
+
+  loadingWaveform = false;
+  loadingEvents   = false;
+  error           = '';
 
   waveformResults: WaveformResult[] = [];
 
   constructor(
-    private archiveService: ArchiveService,
-    private cdref: ChangeDetectorRef,
+    private archiveService:  ArchiveService,
+    private bookmarkService: BookmarkService,
+    private route:           ActivatedRoute,
+    private cdref:           ChangeDetectorRef,
   ) {}
 
   ngOnInit() {
     this.loadChannels();
+    this.loadAllBookmarks();
   }
+
+  //  channels / days / events 
 
   loadChannels() {
     this.archiveService.getAvailableChannels().subscribe({
       next: channels => {
         this.availableChannels = channels;
-        if (channels.length > 0) {
+
+        // Pre-fill from query params if present, otherwise default to first channel
+        const qp = this.route.snapshot.queryParamMap;
+        if (qp.get('channels')) {
+          this.selectedChannels = qp.get('channels')!.split(',');
+        } else if (channels.length > 0) {
           this.selectedChannels = [channels[0]];
-          this.loadDays();
         }
+
+        this.loadDays(qp);
         this.cdref.detectChanges();
       },
       error: () => {
@@ -81,15 +77,32 @@ export class Archive implements OnInit {
     });
   }
 
-  loadDays() {
+  loadDays(qp?: any) {
     const ch = this.selectedChannels[0];
     if (!ch) return;
 
     this.archiveService.getAvailableDays(ch).subscribe({
       next: days => {
         this.availableDays = days;
-        this.selectedDate  = days.at(-1) ?? '';
-        if (this.selectedDate) this.loadEvents();
+
+        // honour query param date if available, otherwise latest day
+        const paramDate = qp?.get('date');
+        this.selectedDate = (paramDate && days.includes(paramDate))
+          ? paramDate
+          : (days.at(-1) ?? '');
+
+        // apply remaining query params
+        if (qp?.get('start')) this.startTime   = qp.get('start');
+        if (qp?.get('end'))   this.endTime     = qp.get('end');
+        if (qp?.get('units')) this.selectedUnits = qp.get('units');
+
+        if (this.selectedDate) {
+          this.loadEvents();
+          this.filterDayBookmarks();
+
+          // auto-fetch if we came from a bookmark link
+          if (qp?.get('date')) this.fetchWaveform();
+        }
         this.cdref.detectChanges();
       },
       error: () => {
@@ -101,40 +114,55 @@ export class Archive implements OnInit {
     });
   }
 
-loadEvents() {
-  if (!this.selectedChannels.length || !this.selectedDate) return;
+  loadEvents() {
+    if (!this.selectedChannels.length || !this.selectedDate) return;
 
-  this.loadingEvents = true;
-  
-  const requests = this.selectedChannels.map(ch =>
-    this.archiveService.getEvents(ch, this.selectedDate)
-  );
+    this.loadingEvents = true;
+    const eventRequests = this.selectedChannels.map(ch =>
+      this.archiveService.getEvents(ch, this.selectedDate).pipe(
+        catchError(() => of([] as any[]))
+      )
+    );
 
-  forkJoin(requests).subscribe({
-    next: (results: any[][]) => {
-      this.events        = results.flat().sort((a, b) => a.filename.localeCompare(b.filename));
-      this.loadingEvents = false;
-      this.cdref.detectChanges();
-    },
-    error: () => {
-      this.events        = [];
-      this.loadingEvents = false;
-      this.cdref.detectChanges();
-    },
-  });
-}
+    // Events are still serialized to avoid any SDS concurrency issues
+    concat(...eventRequests).pipe(toArray()).subscribe({
+      next: (results: any[][]) => {
+        this.events        = results.flat().sort((a, b) => a.filename.localeCompare(b.filename));
+        this.loadingEvents = false;
+        this.cdref.detectChanges();
+      },
+      error: () => {
+        this.events        = [];
+        this.loadingEvents = false;
+        this.cdref.detectChanges();
+      },
+    });
+  }
+
+  //  channel toggling 
 
   toggleChannel(ch: string) {
-    if (this.selectedChannels.includes(ch)) {
-      this.selectedChannels = this.selectedChannels.filter(c => c !== ch);
-    } else {
-      this.selectedChannels = [...this.selectedChannels, ch];
-    }
+    this.selectedChannels = this.selectedChannels.includes(ch)
+      ? this.selectedChannels.filter(c => c !== ch)
+      : [...this.selectedChannels, ch];
   }
 
   isChannelSelected(ch: string): boolean {
     return this.selectedChannels.includes(ch);
   }
+
+  onChannelToggle() {
+    this.waveformResults = [];
+    this.events          = [];
+    this.loadDays();
+  }
+
+  onDateChange() {
+    this.loadEvents();
+    this.filterDayBookmarks();
+  }
+
+  //  waveform 
 
   fetchWaveform() {
     if (!this.selectedChannels.length || !this.selectedDate) return;
@@ -143,20 +171,18 @@ loadEvents() {
     this.loadingWaveform = true;
     this.waveformResults = [];
 
-    const start = `${this.selectedDate}T${this.startTime}Z`;
-    const end   = `${this.selectedDate}T${this.endTime}Z`;
-
-    const requests = this.selectedChannels.map(ch =>
-      this.archiveService.getWaveform(ch, start, end, this.selectedUnits)
-    );
-
-    forkJoin(requests).subscribe({
-      next: (responses: WaveformResponse[]) => {
-        this.waveformResults = responses.map(res => ({
+    const start    = `${this.selectedDate}T${this.startTime}Z`;
+    const end      = `${this.selectedDate}T${this.endTime}Z`;
+    this.archiveService.getWaveforms(this.selectedChannels, start, end, this.selectedUnits).subscribe({
+      next: ({ results, errors }) => {
+        this.waveformResults = results.map(res => ({
           res,
           chartData:    this.buildChartData(res),
           chartOptions: this.buildChartOptions(res),
         }));
+
+        this.error = errors.map(e => e.detail).join(' · ');
+
         this.loadingWaveform = false;
         this.cdref.detectChanges();
       },
@@ -174,7 +200,7 @@ loadEvents() {
     }
     this.selectedDate = ev.date;
     this.startTime    = '00:00:00';
-    this.endTime      = '23:59:59';
+    this.endTime      = '00:30:00';
     this.fetchWaveform();
   }
 
@@ -182,15 +208,78 @@ loadEvents() {
     this.archiveService.downloadMseed(ev.channel, ev.date);
   }
 
-  onChannelToggle() {
-    this.waveformResults = [];
-    this.events          = [];
-    this.loadDays();
+  //  bookmarks 
+
+  loadAllBookmarks() {
+    this.bookmarkService.getBookmarks().subscribe({
+      next: (raw: any[]) => {
+        this.allBookmarks = raw.map(bm => ({
+          ...bm,
+          start:   new Date(bm.start.endsWith('Z')    ? bm.start    : bm.start    + 'Z'),
+          end:     new Date(bm.end.endsWith('Z')      ? bm.end      : bm.end      + 'Z'),
+          savedAt: new Date(bm.saved_at?.endsWith('Z') ? bm.saved_at : (bm.saved_at ?? bm.savedAt) + 'Z'),
+        }));
+        this.filterDayBookmarks();
+        this.cdref.detectChanges();
+      },
+    });
   }
 
-  onDateChange() {
-    this.loadEvents();
+  filterDayBookmarks() {
+    if (!this.selectedDate) { this.dayBookmarks = []; return; }
+    this.dayBookmarks = this.allBookmarks
+      .filter(bm => bm.start.toISOString().substring(0, 10) === this.selectedDate)
+      .sort((a, b) => a.start.getTime() - b.start.getTime());
   }
+
+  loadBookmark(bm: Bookmark) {
+    this.selectedChannels = [...bm.channels];
+    this.selectedDate     = bm.start.toISOString().substring(0, 10);
+    this.startTime        = bm.start.toISOString().substring(11, 19);
+    this.endTime          = bm.end.toISOString().substring(11, 19);
+    this.selectedUnits    = bm.units;
+    this.loadDays();
+    this.fetchWaveform();
+  }
+
+  saveBookmark() {
+    if (!this.selectedChannels.length || !this.selectedDate) return;
+
+    const payload = {
+      label:    this.bookmarkLabel.trim() || `${this.selectedDate} ${this.startTime}`,
+      channels: [...this.selectedChannels],
+      start:    new Date(`${this.selectedDate}T${this.startTime}Z`),
+      end:      new Date(`${this.selectedDate}T${this.endTime}Z`),
+      units:    this.selectedUnits,
+    };
+
+    this.bookmarkService.saveBookmark(payload).subscribe({
+      next: (saved: any) => {
+        const bm: Bookmark = {
+          ...saved,
+          start:   new Date(saved.start.endsWith('Z')    ? saved.start    : saved.start    + 'Z'),
+          end:     new Date(saved.end.endsWith('Z')      ? saved.end      : saved.end      + 'Z'),
+          savedAt: new Date(saved.saved_at?.endsWith('Z') ? saved.saved_at : (saved.saved_at ?? saved.savedAt) + 'Z'),
+        };
+        this.allBookmarks  = [bm, ...this.allBookmarks];
+        this.bookmarkLabel = '';
+        this.filterDayBookmarks();
+        this.cdref.detectChanges();
+      },
+    });
+  }
+
+  deleteBookmark(id: string) {
+    this.bookmarkService.deleteBookmark(id).subscribe({
+      next: () => {
+        this.allBookmarks = this.allBookmarks.filter(b => b.id !== id);
+        this.filterDayBookmarks();
+        this.cdref.detectChanges();
+      },
+    });
+  }
+
+  //  chart helpers 
 
   private buildChartData(res: WaveformResponse): any {
     const toUtcMs = (s: string) => new Date(s.endsWith('Z') ? s : s + 'Z').getTime();
@@ -225,9 +314,9 @@ loadEvents() {
       scales: {
         x: {
           display: true,
-          ticks:  { color: '#64748b', maxTicksLimit: 10, autoSkip: true },
-          grid:   { color: '#1e293b' },
-          border: { display: false },
+          ticks:   { color: '#64748b', maxTicksLimit: 10, autoSkip: true },
+          grid:    { color: '#1e293b' },
+          border:  { display: false },
         },
         y: {
           grid:   { color: '#1e293b' },

@@ -1,0 +1,80 @@
+<svg width="100%" viewBox="0 0 680 680" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .bg { fill: #0f1117; }
+    .circle-outer { fill: none; stroke: #1e2433; stroke-width: 1.5; }
+    .grid { stroke: #1a1f2e; stroke-width: 0.8; fill: none; }
+    .wave { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .glow-green { stroke: #22c55e; }
+    .glow-blue  { stroke: #3b82f6; }
+    .glow-amber { stroke: #f59e0b; }
+    .dot { fill: #22c55e; }
+    .label { font-family: monospace; font-size: 28px; font-weight: 700; fill: #e2e8f0; letter-spacing: 2px; }
+    .sublabel { font-family: monospace; font-size: 18px; fill: #475569; letter-spacing: 6px; }
+    .tick { stroke: #1e2433; stroke-width: 1; }
+  </style>
+
+  <!-- Background -->
+  <rect width="680" height="680" rx="80" class="bg"/>
+
+  <!-- Subtle grid -->
+  <line x1="340" y1="80" x2="340" y2="600" class="grid"/>
+  <line x1="80" y1="340" x2="600" y2="340" class="grid"/>
+  <line x1="180" y1="80" x2="180" y2="600" class="grid"/>
+  <line x1="500" y1="80" x2="500" y2="600" class="grid"/>
+  <line x1="80" y1="220" x2="600" y2="220" class="grid"/>
+  <line x1="80" y1="460" x2="600" y2="460" class="grid"/>
+
+  <!-- Outer rings -->
+  <circle cx="340" cy="310" r="220" class="circle-outer"/>
+  <circle cx="340" cy="310" r="180" style="fill:none;stroke:#161b2a;stroke-width:1;"/>
+
+  <!-- Z channel — main seismic wave (center, green) -->
+  <polyline class="wave glow-green" stroke-width="3"
+    points="
+      100,310
+      130,310 145,310 155,270 165,370 175,240 185,400 195,260 205,350
+      215,310 230,310 245,310 255,295 265,325 275,305 285,315
+      295,310 310,310 325,310 340,310 355,310 370,310 385,310
+      395,295 405,325 415,300 425,318 435,308 445,312
+      455,310 470,310 485,310 500,310 520,310 550,310 580,310
+    "/>
+
+  <!-- N channel — smaller wave (offset up, blue) -->
+  <polyline class="wave glow-blue" stroke-width="2" opacity="0.7"
+    points="
+      100,220
+      130,220 148,220 158,200 168,245 176,195 184,248 192,210 202,230
+      212,220 230,220 250,220 262,213 272,228 282,218 292,222
+      302,220 320,220 340,220 360,220 378,220
+      388,213 398,228 408,216 418,224 428,220
+      440,220 460,220 480,220 510,220 550,220 580,220
+    "/>
+
+  <!-- E channel — smaller wave (offset down, amber) -->
+  <polyline class="wave glow-amber" stroke-width="2" opacity="0.7"
+    points="
+      100,400
+      130,400 148,400 156,385 164,415 172,382 180,418 188,392 198,408
+      208,400 224,400 244,400 256,393 266,407 276,397 286,403
+      296,400 314,400 334,400 354,400 374,400
+      382,392 392,410 402,394 412,406 422,400
+      434,400 454,400 474,400 504,400 550,400 580,400
+    "/>
+
+  <!-- Live dot on Z wave -->
+  <circle cx="580" cy="310" r="6" class="dot">
+    <animate attributeName="opacity" values="1;0.2;1" dur="1.6s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Channel labels -->
+  <text x="96" y="307" style="font-family:monospace;font-size:13px;fill:#22c55e;font-weight:700;">Z</text>
+  <text x="96" y="217" style="font-family:monospace;font-size:13px;fill:#3b82f6;font-weight:700;">N</text>
+  <text x="96" y="397" style="font-family:monospace;font-size:13px;fill:#f59e0b;font-weight:700;">E</text>
+
+  <!-- Divider -->
+  <line x1="200" y1="570" x2="480" y2="570" style="stroke:#1e2433;stroke-width:1;"/>
+
+  <!-- Wordmark -->
+  <text x="340" y="540" text-anchor="middle" class="label">RPI-SEISM</text>
+  <text x="340" y="610" text-anchor="middle" class="sublabel">MONITOR</text>
+</svg>
