@@ -1,4 +1,4 @@
-interface ArchiveEvent {
+export interface ArchiveEvent {
   date:     string;
   channel:  string;
   filename: string;

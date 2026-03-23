@@ -1,4 +1,4 @@
-interface WaveformResponse {
+export interface WaveformResponse {
   channel:      string;
   network:      string;
   station:      string;
@@ -9,4 +9,9 @@ interface WaveformResponse {
   npts_raw:     number;
   npts_display: number;
   data:         number[];
+}
+
+export interface WaveformsResponse {
+  results: WaveformResponse[];
+  errors:  { channel: string; detail: string }[];
 }
