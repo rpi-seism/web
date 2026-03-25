@@ -2,7 +2,7 @@ import { ChangeDetectorRef, Component, ElementRef, OnInit, QueryList, ViewChildr
 import { CommonModule } from '@angular/common';
 import { WebsocketService } from '../services/websocket-service';
 import { ChartModule } from 'primeng/chart';
-import { SensorData } from '../entities/sensor_data';
+import { SensorData } from '../entities/ws/sensor-data';
 import { RouterModule } from '@angular/router';
 import FFT from 'fft.js';
 
@@ -52,7 +52,7 @@ export class Dashboard implements OnInit {
   ngOnInit() {
     this.initChartOptions();
 
-    this.dataService.getMessages().subscribe({
+    this.dataService.getSensorUpdates().subscribe({
       next: (msg: SensorData) => {
         this.wsState = 'live';
         this.updateChart(msg);
@@ -129,7 +129,7 @@ export class Dashboard implements OnInit {
   //  Incoming data 
 
   updateChart(msg: SensorData) {
-    const { channel, data, fs, timestamp } = msg;
+    const { channel, data, fs, timestamp } = msg.payload;
 
     // Guard: skip packet if fs is missing or zero — labels would be NaN
     if (!fs || isNaN(fs) || fs <= 0) {
