@@ -1,8 +1,11 @@
 import { Injectable } from '@angular/core';
 import { webSocket, WebSocketSubject } from 'rxjs/webSocket';
-import { Observable, timer, retry, catchError, EMPTY } from 'rxjs';
-import { SensorData } from '../entities/sensor_data';
+import { Observable, timer, retry, catchError, EMPTY, share, filter, map } from 'rxjs';
+import { SensorData } from '../entities/ws/sensor-data';
 import {environment} from '../../environments/environment';
+import { BaseWsMessage } from '../entities/ws/base';
+import { WebsocketMessageTypeEnum } from '../entities/ws/enums';
+import { StateOfHealth } from '../entities/ws/state-of-health';
 
 @Injectable({
   providedIn: 'root',
@@ -11,12 +14,17 @@ export class WebsocketService {
   private socket$: WebSocketSubject<SensorData> | null = null;
   private readonly RECONNECT_INTERVAL = 3000; // 3 seconds
   private readonly WS_URL = environment.websocketUrl;
+  private allMessages$: Observable<any>;
+
+  constructor() {
+    this.allMessages$ = this.getMessages().pipe(share());
+  }
 
   /**
    * Returns a stream of sensor data that automatically reconnects on failure.
    */
-  getMessages(): Observable<SensorData> {
-    return new Observable<SensorData>(observer => {
+  getMessages(): Observable<any> {
+    return new Observable<BaseWsMessage>(observer => {
       const socket$ = this.connect();
 
       const sub = socket$.subscribe({
@@ -45,7 +53,26 @@ export class WebsocketService {
     );
   }
 
-  private connect(): WebSocketSubject<SensorData> {
+  /**
+   * Listen for specific message types
+   */
+  onEvent<T extends BaseWsMessage>(type: T['type']): Observable<T> {
+    return this.allMessages$.pipe(
+      filter(msg => msg.type === type),
+      map(msg => msg as T)
+    );
+  }
+
+  // Example convenience methods
+  getSensorUpdates(): Observable<SensorData> {
+    return this.onEvent<SensorData>(WebsocketMessageTypeEnum.DATA);
+  }
+
+  getStateOfHealth(): Observable<StateOfHealth> {
+    return this.onEvent<StateOfHealth>(WebsocketMessageTypeEnum.STATE_OF_HEALTH);
+  }
+
+  private connect(): WebSocketSubject<any> {
     // If the socket doesn't exist or was closed, create a new one
     if (!this.socket$ || this.socket$.closed) {
       this.socket$ = webSocket({
