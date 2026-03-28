@@ -8,16 +8,8 @@ import { ConfirmationService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { ButtonModule } from 'primeng/button';
+import { Bookmark } from '../entities/bookmark';
 
-interface Bookmark {
-  id:       string;
-  label:    string;
-  channels: string[];
-  start:    Date;
-  end:      Date;
-  units:    string;
-  savedAt:  Date;
-}
 
 @Component({
   selector:    'app-bookmarks',

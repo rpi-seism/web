@@ -5,11 +5,9 @@ import { ChartModule } from 'primeng/chart';
 import { SensorData } from '../entities/ws/sensor-data';
 import { RouterModule } from '@angular/router';
 import FFT from 'fft.js';
+import { SpectrogramFrame } from '../entities/spectrogram-frame';
 import { environment } from '../../environments/environment';
 
-interface SpectrogramFrame {
-  magnitudes: number[];
-}
 
 @Component({
   selector: 'app-dashboard',

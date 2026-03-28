@@ -283,16 +283,6 @@ export class Archive implements OnInit {
     });
   }
 
-  deleteBookmark(id: string) {
-    this.bookmarkService.deleteBookmark(id).subscribe({
-      next: () => {
-        this.allBookmarks = this.allBookmarks.filter(b => b.id !== id);
-        this.filterDayBookmarks();
-        this.cdref.detectChanges();
-      },
-    });
-  }
-
   //  chart helpers 
 
   private buildChartData(res: WaveformResponse): any {
