@@ -11,6 +11,11 @@ import { WaveformResponse } from '../entities/waveform-response';
 import { ArchiveEvent } from '../entities/archive-event';
 import { WaveformResult } from '../entities/waveform-result';
 import { Bookmark } from '../entities/bookmark';
+import { Chart } from 'chart.js';
+import zoomPlugin from 'chartjs-plugin-zoom';
+import { environment } from '../../environments/environment';
+
+Chart.register(zoomPlugin);
 
 @Component({
   selector:    'app-archive',
@@ -37,6 +42,8 @@ export class Archive implements OnInit {
   loadingWaveform = false;
   loadingEvents   = false;
   error           = '';
+
+  public chartSettings = environment.chartsSettings;
 
   waveformResults: WaveformResult[] = [];
 
@@ -86,7 +93,14 @@ export class Archive implements OnInit {
         this.availableDays = days;
 
         // honour query param date if available, otherwise latest day
-        const paramDate = qp?.get('date');
+        let paramDate = "";
+        if (qp){
+          paramDate = qp?.get('date');
+        }
+        else {
+          paramDate = this.selectedDate;
+        }
+
         this.selectedDate = (paramDate && days.includes(paramDate))
           ? paramDate
           : (days.at(-1) ?? '');
@@ -325,7 +339,20 @@ export class Archive implements OnInit {
           title:  { display: true, text: res.units, color: '#475569' },
         },
       },
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: { display: false },
+        zoom: {
+          pan: {
+            enabled: true,
+            mode: 'x',
+          },
+          zoom: {
+            wheel: { enabled: true },
+            pinch: { enabled: true },
+            mode: 'x',
+          },
+        },
+      },
     };
   }
 

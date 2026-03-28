@@ -151,6 +151,8 @@
           <span></span>
         </div>
 
+        <p-confirmdialog />
+
         @for (bm of filtered; track bm.id) {
           <div class="px-6 py-4 border-b border-slate-800/50 last:border-b-0
                       hover:bg-slate-800/40 transition-colors group
@@ -188,7 +190,8 @@
                        px-2 py-1 rounded border border-blue-700/50 hover:border-blue-500 transition-colors whitespace-nowrap">
                 Open
               </a>
-              <button (click)="deleteBookmark(bm.id)"
+              <!-- <p-button (click)="deleteBookmark($event, bm.id)" label="Delete" severity="danger" [outlined]="true"/> -->
+              <button (click)="deleteBookmark($event, bm.id)"
                 class="text-[10px] font-bold text-red-500 hover:text-red-400 uppercase tracking-widest
                        px-2 py-1 rounded border border-red-900/50 hover:border-red-700 transition-colors">
                 ✕
@@ -204,7 +207,7 @@
     <!--  BULK DELETE  -->
     @if (filtered.length > 1) {
       <div class="flex justify-end">
-        <button (click)="deleteFiltered()"
+        <button (click)="deleteFiltered($event)"
           class="text-[10px] font-bold text-red-500 hover:text-red-400 uppercase tracking-widest
                  px-4 py-2 rounded-xl border border-red-900/50 hover:border-red-700 transition-colors">
           ✕ Delete all filtered ({{ filtered.length }})

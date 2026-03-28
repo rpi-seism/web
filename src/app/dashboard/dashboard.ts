@@ -5,6 +5,7 @@ import { ChartModule } from 'primeng/chart';
 import { SensorData } from '../entities/ws/sensor-data';
 import { RouterModule } from '@angular/router';
 import FFT from 'fft.js';
+import { environment } from '../../environments/environment';
 
 interface SpectrogramFrame {
   magnitudes: number[];
@@ -26,12 +27,10 @@ export class Dashboard implements OnInit {
   wsState: 'connecting' | 'live' | 'disconnected' = 'connecting';
   fftLogarithmic = false;
 
+  public chartSettings = environment.chartsSettings;
+
   chartOptions: any;
   fftOptions: any;
-
-  readonly WINDOW_SIZE = 512;
-  readonly MAX_POINTS = 512;
-  readonly SPECTROGRAM_HISTORY = 300;
 
   @ViewChildren('spectrogramCanvas') spectrogramCanvases!: QueryList<ElementRef<HTMLCanvasElement>>;
 
@@ -149,8 +148,8 @@ export class Dashboard implements OnInit {
 
     for (const v of data) dataset.data.push(v);
 
-    if (dataset.data.length > this.WINDOW_SIZE) {
-      dataset.data = dataset.data.slice(-this.WINDOW_SIZE);
+    if (dataset.data.length > this.chartSettings.windowSize) {
+      dataset.data = dataset.data.slice(-this.chartSettings.windowSize);
     }
 
     this.channels[channel] = { ...this.channels[channel] };
@@ -174,12 +173,12 @@ export class Dashboard implements OnInit {
   private initializeChannelArrays(channel: string, fs: number) {
     // fs is validated before this call — no NaN risk here
     const fftLabels = Array.from(
-      { length: this.MAX_POINTS / 2 },
-      (_, i) => ((i * fs) / this.MAX_POINTS).toFixed(1) + ' Hz'
+      { length: this.chartSettings.maxPoints / 2 },
+      (_, i) => ((i * fs) / this.chartSettings.maxPoints).toFixed(1) + ' Hz'
     );
 
     this.channels[channel] = {
-      labels: new Array(this.WINDOW_SIZE).fill(''),
+      labels: new Array(this.chartSettings.windowSize).fill(''),
       datasets: [{ data: [], borderColor: '#3b82f6', fill: false }]
     };
 
@@ -206,18 +205,18 @@ export class Dashboard implements OnInit {
   }
 
   private updateFFT(channel: string, timeData: number[]): number[] | null {
-    if (timeData.length < this.MAX_POINTS) return null;
+    if (timeData.length < this.chartSettings.maxPoints) return null;
 
     if (!this.fftInstances[channel]) {
-      this.fftInstances[channel] = new FFT(this.MAX_POINTS);
+      this.fftInstances[channel] = new FFT(this.chartSettings.maxPoints);
     }
     const fft = this.fftInstances[channel];
 
     const out = fft.createComplexArray();
-    const windowed = this.applyHannWindow(timeData.slice(-this.MAX_POINTS));
+    const windowed = this.applyHannWindow(timeData.slice(-this.chartSettings.maxPoints));
     fft.transform(out, fft.toComplexArray(windowed, null));
 
-    const numBins = this.MAX_POINTS / 2;
+    const numBins = this.chartSettings.maxPoints / 2;
     const magnitudes = new Array(numBins);
     for (let i = 0; i < numBins; i++) {
       const real = out[2 * i];
@@ -241,7 +240,7 @@ export class Dashboard implements OnInit {
   private pushSpectrogramFrame(channel: string, magnitudes: number[]) {
     const frames = this.spectrogramFrames[channel];
     frames.push({ magnitudes: [...magnitudes] });
-    if (frames.length > this.SPECTROGRAM_HISTORY) {
+    if (frames.length > this.chartSettings.spectrogramHistory) {
       frames.shift();
     }
   }
@@ -257,10 +256,10 @@ export class Dashboard implements OnInit {
     const frames = this.spectrogramFrames[channel];
     if (frames.length === 0) return;
 
-    const numBins = this.MAX_POINTS / 2;
+    const numBins = this.chartSettings.maxPoints / 2;
     const canvasW = canvasEl.width;
     const canvasH = canvasEl.height;
-    const colW = canvasW / this.SPECTROGRAM_HISTORY;
+    const colW = canvasW / this.chartSettings.spectrogramHistory;
     const rowH = canvasH / numBins;
 
     let globalMax = 0;
@@ -273,7 +272,7 @@ export class Dashboard implements OnInit {
 
     ctx.clearRect(0, 0, canvasW, canvasH);
 
-    const startX = (this.SPECTROGRAM_HISTORY - frames.length) * colW;
+    const startX = (this.chartSettings.spectrogramHistory - frames.length) * colW;
 
     for (let t = 0; t < frames.length; t++) {
       const x = startX + t * colW;

@@ -1,9 +1,13 @@
-import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { CommonModule }                         from '@angular/common';
 import { FormsModule }                          from '@angular/forms';
 import { RouterModule }                         from '@angular/router';
 import { DatePickerModule }                     from 'primeng/datepicker';
 import { BookmarkService }                      from '../services/bookmark-service';
+import { ConfirmationService } from 'primeng/api';
+import { ToastModule } from 'primeng/toast';
+import { ConfirmDialogModule } from 'primeng/confirmdialog';
+import { ButtonModule } from 'primeng/button';
 
 interface Bookmark {
   id:       string;
@@ -19,9 +23,11 @@ interface Bookmark {
   selector:    'app-bookmarks',
   standalone:  true,
   templateUrl: './bookmarks.html',
-  imports:     [CommonModule, FormsModule, RouterModule, DatePickerModule],
+  imports:     [CommonModule, FormsModule, RouterModule, DatePickerModule, ConfirmDialogModule, ToastModule, ButtonModule],
+  providers: [ConfirmationService]
 })
 export class Bookmarks implements OnInit {
+  private confirmationService = inject(ConfirmationService);
 
   bookmarks:     Bookmark[] = [];
   filtered:      Bookmark[] = [];
@@ -131,21 +137,62 @@ export class Bookmarks implements OnInit {
 
   //  actions 
 
-  deleteBookmark(id: string) {
-    this.bookmarkService.deleteBookmark(id).subscribe({
-      next: () => {
-        this.bookmarks = this.bookmarks.filter(b => b.id !== id);
-        this.applyFilters();
-      },
+  deleteBookmark(event: Event, id: string) {
+    this.confirmationService.confirm({
+        target: event.target as EventTarget,
+        message: 'Do you want to delete this record?',
+        header: 'Danger Zone',
+        icon: 'pi pi-info-circle',
+        rejectLabel: 'Cancel',
+        rejectButtonProps: {
+            label: 'Cancel',
+            severity: 'secondary',
+            outlined: true
+        },
+        acceptButtonProps: {
+            label: 'Delete',
+            severity: 'danger'
+        },
+    
+        accept: () => {
+            this.bookmarkService.deleteBookmark(id).subscribe({
+              next: () => {
+                this.bookmarks = this.bookmarks.filter(b => b.id !== id);
+                this.applyFilters();
+              },
+            });
+        },
+        reject: () => {
+        }
     });
   }
 
-  deleteFiltered() {
-    if (!confirm(`Delete ${this.filtered.length} bookmarks?`)) return;
-    const ids = this.filtered.map(b => b.id);
-    ids.forEach(id => this.bookmarkService.deleteBookmark(id).subscribe());
-    this.bookmarks = this.bookmarks.filter(b => !ids.includes(b.id));
-    this.applyFilters();
+  deleteFiltered(event: Event) {
+    this.confirmationService.confirm({
+        target: event.target as EventTarget,
+        message: 'Do you want to delete this record?',
+        header: 'Danger Zone',
+        icon: 'pi pi-info-circle',
+        rejectLabel: 'Cancel',
+        rejectButtonProps: {
+            label: 'Cancel',
+            severity: 'secondary',
+            outlined: true
+        },
+        acceptButtonProps: {
+            label: 'Delete',
+            severity: 'danger'
+        },
+    
+        accept: () => {
+          const ids = this.filtered.map(b => b.id);
+          ids.forEach(id => this.bookmarkService.deleteBookmark(id).subscribe());
+          this.bookmarks = this.bookmarks.filter(b => !ids.includes(b.id));
+          this.applyFilters();
+        },
+        reject: () => {
+        }
+    });
   }
 
   //  helpers 
