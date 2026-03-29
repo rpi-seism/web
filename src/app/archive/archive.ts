@@ -208,16 +208,6 @@ export class Archive implements OnInit {
     });
   }
 
-  loadEvent(ev: ArchiveEvent) {
-    if (!this.selectedChannels.includes(ev.channel)) {
-      this.selectedChannels = [ev.channel];
-    }
-    this.selectedDate = ev.date;
-    this.startTime    = '00:00:00';
-    this.endTime      = '00:30:00';
-    this.fetchWaveform();
-  }
-
   downloadMseed(ev: ArchiveEvent) {
     this.archiveService.downloadMseed(ev.channel, ev.date);
   }

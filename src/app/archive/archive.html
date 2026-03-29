@@ -178,12 +178,6 @@
                   <td class="py-2 pr-6 font-mono text-slate-500 text-xs">{{ ev.filename }}</td>
                   <td class="py-2 pr-6 text-right font-mono text-slate-500 text-xs">{{ ev.size_kb }} KB</td>
                   <td class="py-2 text-right flex gap-2 justify-end">
-                    <button (click)="loadEvent(ev)"
-                      class="text-[10px] font-bold text-blue-400 hover:text-blue-300 uppercase tracking-widest
-                             opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 rounded
-                             border border-blue-700/50 hover:border-blue-500">
-                      Plot day
-                    </button>
                     <button (click)="downloadMseed(ev)"
                       class="text-[10px] font-bold text-emerald-400 hover:text-emerald-300 uppercase tracking-widest
                              opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 rounded
