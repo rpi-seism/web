@@ -256,6 +256,11 @@ export class Archive implements OnInit {
     this.fetchWaveform();
   }
 
+  exportBookmark(bm: Bookmark) {
+    // ask for type of export in modal
+    this.archiveService.exportWaveforms(bm.channels, bm.start.toISOString(), bm.end.toISOString(), bm.units, "CSV");
+  }
+
   saveBookmark() {
     if (!this.selectedChannels.length || !this.selectedDate) return;
 

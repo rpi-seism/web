@@ -52,6 +52,20 @@ export class ArchiveService {
     return this.http.get<WaveformsResponse>(`${this.API}/archive/waveforms`, { params });
   }
 
+  public exportWaveforms(channels: string[], start: string, end: string, units: string, fmt: string): void{
+    // HttpParams doesn't support repeated keys via set(), build manually
+    let params = new HttpParams()
+      .set('start',    start)
+      .set('end',      end)
+      .set('units',    units)
+      .set('fmt',  fmt);
+ 
+    channels.forEach(ch => { params = params.append('channels', ch); });
+ 
+    let url = `${this.API}/archive/export_waveforms?${params.toString()}`;
+    window.open(url, '_blank');
+  }
+
   public downloadMseed(channel: string, date: string): void {
     const params = new HttpParams()
       .set('channel', channel)
