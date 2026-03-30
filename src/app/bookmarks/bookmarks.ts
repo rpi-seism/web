@@ -11,13 +11,16 @@ import { ButtonModule } from 'primeng/button';
 import { Bookmark } from '../entities/bookmark';
 import { DialogService, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { EditBookmarkLabel, EditBookmarkLabelData } from '../dialogs/edit-bookmark-label';
+import { ExportFormat, WaveformExport, WaveformExportData } from '../dialogs/waveform-export';
+import { ArchiveService } from '../services/archive-service';
+import { TableModule } from 'primeng/table';
 
 
 @Component({
   selector:    'app-bookmarks',
   standalone:  true,
   templateUrl: './bookmarks.html',
-  imports:     [CommonModule, FormsModule, RouterModule, DatePickerModule, ConfirmDialogModule, ToastModule, ButtonModule],
+  imports:     [CommonModule, FormsModule, RouterModule, DatePickerModule, ConfirmDialogModule, ToastModule, ButtonModule, TableModule],
   providers: [ConfirmationService, DialogService]
 })
 export class Bookmarks implements OnInit {
@@ -38,6 +41,7 @@ export class Bookmarks implements OnInit {
   private dialogRef: DynamicDialogRef | null = null;
 
   constructor(
+    private archiveService: ArchiveService,
     private bookmarkService: BookmarkService,
     private cdref: ChangeDetectorRef,
   ) {}
@@ -221,6 +225,27 @@ export class Bookmarks implements OnInit {
         },
       });
     });
+  }
+
+  exportBookmark(bm: Bookmark) {
+    const label = `Export — ${bm.label}`;
+  
+    this.dialogRef = this.dialogService.open(WaveformExport, {
+      header:          label,
+      width:           '520px',
+      modal:           true,
+      closable:        true,
+      dismissableMask: true,
+      style:           { 'border': '1px solid #1e293b', 'border-radius': '1.5rem', 'overflow': 'hidden' },
+      data:            { bookmark: bm } satisfies WaveformExportData,
+    });
+  
+    this.dialogRef?.onClose.subscribe((format: ExportFormat | null) => {
+      if (!format) return;
+
+      this.archiveService.exportWaveforms(bm.channels, bm.start.toISOString(), bm.end.toISOString(), bm.units, format);
+    });
+    // ask for type of export in modal
   }
 
   //  helpers 
