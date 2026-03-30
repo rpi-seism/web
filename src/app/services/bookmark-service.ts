@@ -20,6 +20,10 @@ export class BookmarkService {
     return this.http.post<Bookmark>(`${this.API}/bookmarks`, bm);
   }
 
+  updateBookmark(id: string, patch: any): Observable<Bookmark> {
+    return this.http.patch<Bookmark>(`${this.API}/bookmarks/${id}`, patch);
+  }
+
   deleteBookmark(id: string): Observable<any> {
     return this.http.delete(`${this.API}/bookmarks/${id}`);
   }

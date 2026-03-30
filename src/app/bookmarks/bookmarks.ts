@@ -9,6 +9,8 @@ import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { ButtonModule } from 'primeng/button';
 import { Bookmark } from '../entities/bookmark';
+import { DialogService, DynamicDialogRef } from 'primeng/dynamicdialog';
+import { EditBookmarkLabel, EditBookmarkLabelData } from '../dialogs/edit-bookmark-label';
 
 
 @Component({
@@ -16,10 +18,11 @@ import { Bookmark } from '../entities/bookmark';
   standalone:  true,
   templateUrl: './bookmarks.html',
   imports:     [CommonModule, FormsModule, RouterModule, DatePickerModule, ConfirmDialogModule, ToastModule, ButtonModule],
-  providers: [ConfirmationService]
+  providers: [ConfirmationService, DialogService]
 })
 export class Bookmarks implements OnInit {
   private confirmationService = inject(ConfirmationService);
+  private dialogService = inject(DialogService);
 
   bookmarks:     Bookmark[] = [];
   filtered:      Bookmark[] = [];
@@ -31,6 +34,8 @@ export class Bookmarks implements OnInit {
   filterText:    string          = '';
 
   loading = false;
+
+  private dialogRef: DynamicDialogRef | null = null;
 
   constructor(
     private bookmarkService: BookmarkService,
@@ -184,6 +189,37 @@ export class Bookmarks implements OnInit {
         },
         reject: () => {
         }
+    });
+  }
+
+  openEditLabel(bm: Bookmark) {
+    this.dialogRef = this.dialogService.open(EditBookmarkLabel, {
+      header:      'Edit bookmark label',
+      width:       '480px',
+      modal:       true,
+      closable:    true,
+      dismissableMask: true,
+      // PrimeNG passes these CSS classes to the dialog container
+      style:        { 'border': '1px solid #1e293b', 'border-radius': '1.5rem', 'overflow': 'hidden' },
+      data: { id: bm.id, label: bm.label } satisfies EditBookmarkLabelData,
+    });
+ 
+    this.dialogRef?.onClose.subscribe((newLabel: string | null) => {
+      if (!newLabel) return;
+ 
+      this.bookmarkService.updateBookmark(bm.id, { label: newLabel }).subscribe({
+        next: (updated: any) => {
+          const idx = this.bookmarks.findIndex(b => b.id === bm.id);
+          if (idx !== -1) {
+            this.bookmarks[idx] = {
+              ...this.bookmarks[idx],
+              label: updated.label,
+            };
+          }
+          this.applyFilters();
+          this.cdref.detectChanges();
+        },
+      });
     });
   }
 

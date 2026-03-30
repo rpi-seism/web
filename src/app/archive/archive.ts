@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { CommonModule }                         from '@angular/common';
 import { FormsModule }                          from '@angular/forms';
 import { RouterModule, ActivatedRoute }         from '@angular/router';
@@ -14,6 +14,8 @@ import { Bookmark } from '../entities/bookmark';
 import { Chart } from 'chart.js';
 import zoomPlugin from 'chartjs-plugin-zoom';
 import { environment } from '../../environments/environment';
+import { DialogService, DynamicDialogRef } from 'primeng/dynamicdialog';
+import { ExportFormat, WaveformExport, WaveformExportData } from '../dialogs/waveform-export';
 
 Chart.register(zoomPlugin);
 
@@ -22,8 +24,10 @@ Chart.register(zoomPlugin);
   standalone:  true,
   templateUrl: './archive.html',
   imports:     [CommonModule, FormsModule, ChartModule, RouterModule],
+  providers:  [DialogService]
 })
 export class Archive implements OnInit {
+  private dialogService = inject(DialogService);
 
   availableChannels: string[]       = [];
   availableDays:     string[]       = [];
@@ -46,6 +50,8 @@ export class Archive implements OnInit {
   public chartSettings = environment.chartsSettings;
 
   waveformResults: WaveformResult[] = [];
+
+  private dialogRef: DynamicDialogRef | null = null;
 
   constructor(
     private archiveService:  ArchiveService,
@@ -247,8 +253,24 @@ export class Archive implements OnInit {
   }
 
   exportBookmark(bm: Bookmark) {
+    const label = `Export — ${bm.label}`;
+ 
+    this.dialogRef = this.dialogService.open(WaveformExport, {
+      header:          label,
+      width:           '520px',
+      modal:           true,
+      closable:        true,
+      dismissableMask: true,
+      style:           { 'border': '1px solid #1e293b', 'border-radius': '1.5rem', 'overflow': 'hidden' },
+      data:            { bookmark: bm } satisfies WaveformExportData,
+    });
+ 
+    this.dialogRef?.onClose.subscribe((format: ExportFormat | null) => {
+      if (!format) return;
+
+      this.archiveService.exportWaveforms(bm.channels, bm.start.toISOString(), bm.end.toISOString(), bm.units, format);
+    });
     // ask for type of export in modal
-    this.archiveService.exportWaveforms(bm.channels, bm.start.toISOString(), bm.end.toISOString(), bm.units, "CSV");
   }
 
   saveBookmark() {
