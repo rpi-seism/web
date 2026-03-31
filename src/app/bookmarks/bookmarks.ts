@@ -203,7 +203,8 @@ export class Bookmarks implements OnInit {
       closable:    true,
       dismissableMask: true,
       // PrimeNG passes these CSS classes to the dialog container
-      style:        { 'border': '1px solid #1e293b', 'border-radius': '1.5rem', 'overflow': 'hidden' },
+      //contentStyle:    { 'background': 'var(--color-slate-950)' },
+      style:        { 'border': '1px solid #1e293b', 'border-radius': '1.5rem', 'overflow': 'hidden', 'background': 'var(--color-slate-950)' },
       data: { id: bm.id, label: bm.label } satisfies EditBookmarkLabelData,
     });
  
@@ -235,7 +236,7 @@ export class Bookmarks implements OnInit {
       modal:           true,
       closable:        true,
       dismissableMask: true,
-      style:           { 'border': '1px solid #1e293b', 'border-radius': '1.5rem', 'overflow': 'hidden' },
+      style:           { 'border': '1px solid #1e293b', 'border-radius': '1.5rem', 'overflow': 'hidden', 'background': 'var(--color-slate-950)' },
       data:            { bookmark: bm } satisfies WaveformExportData,
     });
   

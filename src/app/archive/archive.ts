@@ -261,7 +261,7 @@ export class Archive implements OnInit {
       modal:           true,
       closable:        true,
       dismissableMask: true,
-      style:           { 'border': '1px solid #1e293b', 'border-radius': '1.5rem', 'overflow': 'hidden' },
+      style:           { 'border': '1px solid #1e293b', 'border-radius': '1.5rem', 'overflow': 'hidden', 'background': 'var(--color-slate-950)' },
       data:            { bookmark: bm } satisfies WaveformExportData,
     });
  
