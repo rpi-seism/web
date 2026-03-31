@@ -1,27 +1,30 @@
-import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { CommonModule }                         from '@angular/common';
 import { FormsModule }                          from '@angular/forms';
 import { RouterModule }                         from '@angular/router';
 import { DatePickerModule }                     from 'primeng/datepicker';
 import { BookmarkService }                      from '../services/bookmark-service';
+import { ConfirmationService } from 'primeng/api';
+import { ToastModule } from 'primeng/toast';
+import { ConfirmDialogModule } from 'primeng/confirmdialog';
+import { ButtonModule } from 'primeng/button';
+import { Bookmark } from '../entities/bookmark';
+import { DialogService, DynamicDialogRef } from 'primeng/dynamicdialog';
+import { EditBookmarkLabel, EditBookmarkLabelData } from '../dialogs/edit-bookmark-label';
+import { ExportFormat, WaveformExport, WaveformExportData } from '../dialogs/waveform-export';
+import { ArchiveService } from '../services/archive-service';
 
-interface Bookmark {
-  id:       string;
-  label:    string;
-  channels: string[];
-  start:    Date;
-  end:      Date;
-  units:    string;
-  savedAt:  Date;
-}
 
 @Component({
   selector:    'app-bookmarks',
   standalone:  true,
   templateUrl: './bookmarks.html',
-  imports:     [CommonModule, FormsModule, RouterModule, DatePickerModule],
+  imports:     [CommonModule, FormsModule, RouterModule, DatePickerModule, ConfirmDialogModule, ToastModule, ButtonModule],
+  providers: [ConfirmationService, DialogService]
 })
 export class Bookmarks implements OnInit {
+  private confirmationService = inject(ConfirmationService);
+  private dialogService = inject(DialogService);
 
   bookmarks:     Bookmark[] = [];
   filtered:      Bookmark[] = [];
@@ -34,7 +37,10 @@ export class Bookmarks implements OnInit {
 
   loading = false;
 
+  private dialogRef: DynamicDialogRef | null = null;
+
   constructor(
+    private archiveService: ArchiveService,
     private bookmarkService: BookmarkService,
     private cdref: ChangeDetectorRef,
   ) {}
@@ -114,7 +120,7 @@ export class Bookmarks implements OnInit {
     }
 
     // sort newest first
-    this.filtered = result.sort((a, b) => b.start.getTime() - a.start.getTime());
+    this.filtered = result.sort((a, b) => a.start.getTime() - b.start.getTime());
     this.cdref.detectChanges();
   }
 
@@ -131,21 +137,114 @@ export class Bookmarks implements OnInit {
 
   //  actions 
 
-  deleteBookmark(id: string) {
-    this.bookmarkService.deleteBookmark(id).subscribe({
-      next: () => {
-        this.bookmarks = this.bookmarks.filter(b => b.id !== id);
-        this.applyFilters();
-      },
+  deleteBookmark(event: Event, id: string) {
+    this.confirmationService.confirm({
+        target: event.target as EventTarget,
+        message: 'Do you want to delete this record?',
+        header: 'Danger Zone',
+        icon: 'pi pi-info-circle',
+        rejectLabel: 'Cancel',
+        rejectButtonProps: {
+            label: 'Cancel',
+            severity: 'secondary',
+            outlined: true
+        },
+        acceptButtonProps: {
+            label: 'Delete',
+            severity: 'danger'
+        },
+    
+        accept: () => {
+            this.bookmarkService.deleteBookmark(id).subscribe({
+              next: () => {
+                this.bookmarks = this.bookmarks.filter(b => b.id !== id);
+                this.applyFilters();
+              },
+            });
+        },
+        reject: () => {
+        }
     });
   }
 
-  deleteFiltered() {
-    if (!confirm(`Delete ${this.filtered.length} bookmarks?`)) return;
-    const ids = this.filtered.map(b => b.id);
-    ids.forEach(id => this.bookmarkService.deleteBookmark(id).subscribe());
-    this.bookmarks = this.bookmarks.filter(b => !ids.includes(b.id));
-    this.applyFilters();
+  deleteFiltered(event: Event) {
+    this.confirmationService.confirm({
+        target: event.target as EventTarget,
+        message: 'Do you want to delete this record?',
+        header: 'Danger Zone',
+        icon: 'pi pi-info-circle',
+        rejectLabel: 'Cancel',
+        rejectButtonProps: {
+            label: 'Cancel',
+            severity: 'secondary',
+            outlined: true
+        },
+        acceptButtonProps: {
+            label: 'Delete',
+            severity: 'danger'
+        },
+    
+        accept: () => {
+          const ids = this.filtered.map(b => b.id);
+          ids.forEach(id => this.bookmarkService.deleteBookmark(id).subscribe());
+          this.bookmarks = this.bookmarks.filter(b => !ids.includes(b.id));
+          this.applyFilters();
+        },
+        reject: () => {
+        }
+    });
+  }
+
+  openEditLabel(bm: Bookmark) {
+    this.dialogRef = this.dialogService.open(EditBookmarkLabel, {
+      header:      'Edit bookmark label',
+      width:       '480px',
+      modal:       true,
+      closable:    true,
+      dismissableMask: true,
+      // PrimeNG passes these CSS classes to the dialog container
+      style:        { 'border': '1px solid #1e293b', 'border-radius': '1.5rem', 'overflow': 'hidden' },
+      data: { id: bm.id, label: bm.label } satisfies EditBookmarkLabelData,
+    });
+ 
+    this.dialogRef?.onClose.subscribe((newLabel: string | null) => {
+      if (!newLabel) return;
+ 
+      this.bookmarkService.updateBookmark(bm.id, { label: newLabel }).subscribe({
+        next: (updated: any) => {
+          const idx = this.bookmarks.findIndex(b => b.id === bm.id);
+          if (idx !== -1) {
+            this.bookmarks[idx] = {
+              ...this.bookmarks[idx],
+              label: updated.label,
+            };
+          }
+          this.applyFilters();
+          this.cdref.detectChanges();
+        },
+      });
+    });
+  }
+
+  exportBookmark(bm: Bookmark) {
+    const label = `Export — ${bm.label}`;
+  
+    this.dialogRef = this.dialogService.open(WaveformExport, {
+      header:          label,
+      width:           '520px',
+      modal:           true,
+      closable:        true,
+      dismissableMask: true,
+      style:           { 'border': '1px solid #1e293b', 'border-radius': '1.5rem', 'overflow': 'hidden' },
+      data:            { bookmark: bm } satisfies WaveformExportData,
+    });
+  
+    this.dialogRef?.onClose.subscribe((format: ExportFormat | null) => {
+      if (!format) return;
+
+      this.archiveService.exportWaveforms(bm.channels, bm.start.toISOString(), bm.end.toISOString(), bm.units, format);
+    });
+    // ask for type of export in modal
   }
 
   //  helpers 

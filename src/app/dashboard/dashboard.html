@@ -60,7 +60,7 @@
         <div class="lg:col-span-3">
           <div class="flex justify-between items-center mb-2">
             <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Velocity Waveform</span>
-            <span class="text-[10px] font-mono text-slate-700">{{ WINDOW_SIZE }} samples</span>
+            <span class="text-[10px] font-mono text-slate-700">{{ this.chartSettings.windowSize }} samples</span>
           </div>
           <div class="h-48 w-full bg-slate-950/30 rounded-2xl border border-slate-800/50 p-2">
             <p-chart type="line" [data]="channels[key]" [options]="chartOptions"></p-chart>
@@ -94,7 +94,7 @@
         <div class="flex justify-between items-center mb-2">
           <span class="text-[10px] font-bold text-violet-400 uppercase tracking-widest">Spectrogram</span>
           <span class="text-[10px] font-mono text-slate-700">
-            {{ SPECTROGRAM_HISTORY }} frames · time →
+            {{ this.chartSettings.spectrogramHistory }} frames · time →
           </span>
         </div>
 
@@ -112,15 +112,15 @@
             <canvas
               #spectrogramCanvas
               class="w-full h-28 block"
-              [width]="SPECTROGRAM_HISTORY"
-              [height]="MAX_POINTS / 2"
+              [width]="this.chartSettings.spectrogramHistory"
+              [height]="this.chartSettings.maxPoints / 2"
             ></canvas>
           </div>
         </div>
 
         <!-- Time axis tick labels -->
         <div class="flex justify-between text-[9px] font-mono text-slate-700 mt-1 px-10">
-          <span>–{{ SPECTROGRAM_HISTORY }}s</span>
+          <span>-{{ this.chartSettings.spectrogramHistory }}s</span>
           <span>now</span>
         </div>
       </div>

@@ -136,7 +136,7 @@
             </div>
           </div>
         </div>
-        <div class="h-72 w-full bg-slate-950/30 rounded-2xl border border-slate-800/50 p-2">
+        <div class="h-48 w-full bg-slate-950/30 rounded-2xl border border-slate-800/50 p-2">
           <p-chart type="line" [data]="wr.chartData" [options]="wr.chartOptions"></p-chart>
         </div>
       </div>
@@ -178,12 +178,6 @@
                   <td class="py-2 pr-6 font-mono text-slate-500 text-xs">{{ ev.filename }}</td>
                   <td class="py-2 pr-6 text-right font-mono text-slate-500 text-xs">{{ ev.size_kb }} KB</td>
                   <td class="py-2 text-right flex gap-2 justify-end">
-                    <button (click)="loadEvent(ev)"
-                      class="text-[10px] font-bold text-blue-400 hover:text-blue-300 uppercase tracking-widest
-                             opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 rounded
-                             border border-blue-700/50 hover:border-blue-500">
-                      Plot day
-                    </button>
                     <button (click)="downloadMseed(ev)"
                       class="text-[10px] font-bold text-emerald-400 hover:text-emerald-300 uppercase tracking-widest
                              opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 rounded
@@ -235,11 +229,10 @@
                        px-2 py-1 rounded border border-blue-700/50 hover:border-blue-500 transition-colors">
                 Load
               </button>
-              <button (click)="deleteBookmark(bm.id)"
-                class="text-[10px] font-bold text-red-500 hover:text-red-400 uppercase tracking-widest
-                       px-2 py-1 rounded border border-red-900/50 hover:border-red-700 transition-colors
-                       opacity-0 group-hover:opacity-100">
-                ✕
+              <button (click)="exportBookmark(bm)"
+                class="text-[10px] font-bold text-green-400 hover:text-green-300 uppercase tracking-widest
+                       px-2 py-1 rounded border border-green-700/50 hover:border-green-500 transition-colors">
+                Export
               </button>
             </div>
           </div>

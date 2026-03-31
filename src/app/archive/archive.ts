@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { CommonModule }                         from '@angular/common';
 import { FormsModule }                          from '@angular/forms';
 import { RouterModule, ActivatedRoute }         from '@angular/router';
@@ -11,14 +11,23 @@ import { WaveformResponse } from '../entities/waveform-response';
 import { ArchiveEvent } from '../entities/archive-event';
 import { WaveformResult } from '../entities/waveform-result';
 import { Bookmark } from '../entities/bookmark';
+import { Chart } from 'chart.js';
+import zoomPlugin from 'chartjs-plugin-zoom';
+import { environment } from '../../environments/environment';
+import { DialogService, DynamicDialogRef } from 'primeng/dynamicdialog';
+import { ExportFormat, WaveformExport, WaveformExportData } from '../dialogs/waveform-export';
+
+Chart.register(zoomPlugin);
 
 @Component({
   selector:    'app-archive',
   standalone:  true,
   templateUrl: './archive.html',
   imports:     [CommonModule, FormsModule, ChartModule, RouterModule],
+  providers:  [DialogService]
 })
 export class Archive implements OnInit {
+  private dialogService = inject(DialogService);
 
   availableChannels: string[]       = [];
   availableDays:     string[]       = [];
@@ -38,7 +47,11 @@ export class Archive implements OnInit {
   loadingEvents   = false;
   error           = '';
 
+  public chartSettings = environment.chartsSettings;
+
   waveformResults: WaveformResult[] = [];
+
+  private dialogRef: DynamicDialogRef | null = null;
 
   constructor(
     private archiveService:  ArchiveService,
@@ -86,7 +99,14 @@ export class Archive implements OnInit {
         this.availableDays = days;
 
         // honour query param date if available, otherwise latest day
-        const paramDate = qp?.get('date');
+        let paramDate = "";
+        if (qp){
+          paramDate = qp?.get('date');
+        }
+        else {
+          paramDate = this.selectedDate;
+        }
+
         this.selectedDate = (paramDate && days.includes(paramDate))
           ? paramDate
           : (days.at(-1) ?? '');
@@ -194,16 +214,6 @@ export class Archive implements OnInit {
     });
   }
 
-  loadEvent(ev: ArchiveEvent) {
-    if (!this.selectedChannels.includes(ev.channel)) {
-      this.selectedChannels = [ev.channel];
-    }
-    this.selectedDate = ev.date;
-    this.startTime    = '00:00:00';
-    this.endTime      = '00:30:00';
-    this.fetchWaveform();
-  }
-
   downloadMseed(ev: ArchiveEvent) {
     this.archiveService.downloadMseed(ev.channel, ev.date);
   }
@@ -242,6 +252,27 @@ export class Archive implements OnInit {
     this.fetchWaveform();
   }
 
+  exportBookmark(bm: Bookmark) {
+    const label = `Export — ${bm.label}`;
+ 
+    this.dialogRef = this.dialogService.open(WaveformExport, {
+      header:          label,
+      width:           '520px',
+      modal:           true,
+      closable:        true,
+      dismissableMask: true,
+      style:           { 'border': '1px solid #1e293b', 'border-radius': '1.5rem', 'overflow': 'hidden' },
+      data:            { bookmark: bm } satisfies WaveformExportData,
+    });
+ 
+    this.dialogRef?.onClose.subscribe((format: ExportFormat | null) => {
+      if (!format) return;
+
+      this.archiveService.exportWaveforms(bm.channels, bm.start.toISOString(), bm.end.toISOString(), bm.units, format);
+    });
+    // ask for type of export in modal
+  }
+
   saveBookmark() {
     if (!this.selectedChannels.length || !this.selectedDate) return;
 
@@ -263,16 +294,6 @@ export class Archive implements OnInit {
         };
         this.allBookmarks  = [bm, ...this.allBookmarks];
         this.bookmarkLabel = '';
-        this.filterDayBookmarks();
-        this.cdref.detectChanges();
-      },
-    });
-  }
-
-  deleteBookmark(id: string) {
-    this.bookmarkService.deleteBookmark(id).subscribe({
-      next: () => {
-        this.allBookmarks = this.allBookmarks.filter(b => b.id !== id);
         this.filterDayBookmarks();
         this.cdref.detectChanges();
       },
@@ -325,7 +346,20 @@ export class Archive implements OnInit {
           title:  { display: true, text: res.units, color: '#475569' },
         },
       },
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: { display: false },
+        zoom: {
+          pan: {
+            enabled: true,
+            mode: 'x',
+          },
+          zoom: {
+            wheel: { enabled: true },
+            pinch: { enabled: true },
+            mode: 'x',
+          },
+        },
+      },
     };
   }
 

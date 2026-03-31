@@ -31,6 +31,7 @@
     "@angular/router": "^21.1.0",
     "@primeuix/themes": "^2.0.3",
     "chart.js": "^4.5.1",
+    "chartjs-plugin-zoom": "^2.2.0",
     "fft.js": "^4.0.4",
     "primeicons": "^7.0.0",
     "primeng": "^21.1.1",
