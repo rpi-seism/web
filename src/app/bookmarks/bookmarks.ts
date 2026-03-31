@@ -13,14 +13,13 @@ import { DialogService, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { EditBookmarkLabel, EditBookmarkLabelData } from '../dialogs/edit-bookmark-label';
 import { ExportFormat, WaveformExport, WaveformExportData } from '../dialogs/waveform-export';
 import { ArchiveService } from '../services/archive-service';
-import { TableModule } from 'primeng/table';
 
 
 @Component({
   selector:    'app-bookmarks',
   standalone:  true,
   templateUrl: './bookmarks.html',
-  imports:     [CommonModule, FormsModule, RouterModule, DatePickerModule, ConfirmDialogModule, ToastModule, ButtonModule, TableModule],
+  imports:     [CommonModule, FormsModule, RouterModule, DatePickerModule, ConfirmDialogModule, ToastModule, ButtonModule],
   providers: [ConfirmationService, DialogService]
 })
 export class Bookmarks implements OnInit {
