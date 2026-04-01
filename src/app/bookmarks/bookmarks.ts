@@ -120,7 +120,7 @@ export class Bookmarks implements OnInit {
     }
 
     // sort newest first
-    this.filtered = result.sort((a, b) => a.start.getTime() - b.start.getTime());
+    this.filtered = result.sort((a, b) => b.start.getTime() - a.start.getTime());
     this.cdref.detectChanges();
   }
 

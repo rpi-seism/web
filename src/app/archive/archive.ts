@@ -182,6 +182,20 @@ export class Archive implements OnInit {
     this.filterDayBookmarks();
   }
 
+  onStartTimeChange(e: Event) {
+    let timeString = (e.target as any).value;
+
+    const [hours, minutes, seconds] = timeString.split(':').map(Number);
+    const date = new Date();
+    date.setHours(hours, minutes, seconds, 0);
+
+    const FIVE_MINUTES_IN_MS = 5 * 60 * 1000;
+    const newTimestamp = date.getTime() + FIVE_MINUTES_IN_MS;
+    const updatedDate = new Date(newTimestamp);
+
+    this.endTime = updatedDate.toTimeString().split(' ')[0];
+  }
+
   //  waveform 
 
   fetchWaveform() {
@@ -239,7 +253,7 @@ export class Archive implements OnInit {
     if (!this.selectedDate) { this.dayBookmarks = []; return; }
     this.dayBookmarks = this.allBookmarks
       .filter(bm => bm.start.toISOString().substring(0, 10) === this.selectedDate)
-      .sort((a, b) => a.start.getTime() - b.start.getTime());
+      .sort((a, b) => b.start.getTime() - a.start.getTime());
   }
 
   loadBookmark(bm: Bookmark) {
