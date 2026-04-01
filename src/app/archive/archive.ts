@@ -253,7 +253,7 @@ export class Archive implements OnInit {
     if (!this.selectedDate) { this.dayBookmarks = []; return; }
     this.dayBookmarks = this.allBookmarks
       .filter(bm => bm.start.toISOString().substring(0, 10) === this.selectedDate)
-      .sort((a, b) => a.start.getTime() - b.start.getTime());
+      .sort((a, b) => b.start.getTime() - a.start.getTime());
   }
 
   loadBookmark(bm: Bookmark) {
