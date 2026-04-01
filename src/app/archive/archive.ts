@@ -182,6 +182,20 @@ export class Archive implements OnInit {
     this.filterDayBookmarks();
   }
 
+  onStartTimeChange(e: Event) {
+    let timeString = (e.target as any).value;
+
+    const [hours, minutes, seconds] = timeString.split(':').map(Number);
+    const date = new Date();
+    date.setHours(hours, minutes, seconds, 0);
+
+    const FIVE_MINUTES_IN_MS = 5 * 60 * 1000;
+    const newTimestamp = date.getTime() + FIVE_MINUTES_IN_MS;
+    const updatedDate = new Date(newTimestamp);
+
+    this.endTime = updatedDate.toTimeString().split(' ')[0];
+  }
+
   //  waveform 
 
   fetchWaveform() {
