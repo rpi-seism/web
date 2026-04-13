@@ -1,19 +1,21 @@
 import { ChangeDetectorRef, Component, ElementRef, OnInit, QueryList, ViewChildren } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { WebsocketService } from '../services/websocket-service';
+import { WebsocketService } from '../../services/websocket-service';
 import { ChartModule } from 'primeng/chart';
-import { SensorData } from '../entities/ws/sensor-data';
+import { SensorData } from '../../entities/ws/sensor-data';
 import { RouterModule } from '@angular/router';
 import FFT from 'fft.js';
-import { SpectrogramFrame } from '../entities/spectrogram-frame';
-import { environment } from '../../environments/environment';
+import { SpectrogramFrame } from '../../entities/spectrogram-frame';
+import { environment } from '../../../environments/environment';
+import { SohPopover } from '../../dialogs/soh-popover/soh-popover';
+import { PopoverModule } from 'primeng/popover';
 
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
   templateUrl: './dashboard.html',
-  imports: [CommonModule, ChartModule, RouterModule],
+  imports: [CommonModule, ChartModule, RouterModule, PopoverModule, SohPopover],
 })
 export class Dashboard implements OnInit {
   channels: { [key: string]: any } = {};

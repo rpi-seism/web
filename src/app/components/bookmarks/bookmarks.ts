@@ -3,16 +3,16 @@ import { CommonModule }                         from '@angular/common';
 import { FormsModule }                          from '@angular/forms';
 import { RouterModule }                         from '@angular/router';
 import { DatePickerModule }                     from 'primeng/datepicker';
-import { BookmarkService }                      from '../services/bookmark-service';
+import { BookmarkService }                      from '../../services/bookmark-service';
 import { ConfirmationService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { ButtonModule } from 'primeng/button';
-import { Bookmark } from '../entities/bookmark';
+import { Bookmark } from '../../entities/bookmark';
 import { DialogService, DynamicDialogRef } from 'primeng/dynamicdialog';
-import { EditBookmarkLabel, EditBookmarkLabelData } from '../dialogs/edit-bookmark-label';
-import { ExportFormat, WaveformExport, WaveformExportData } from '../dialogs/waveform-export';
-import { ArchiveService } from '../services/archive-service';
+import { EditBookmarkLabel, EditBookmarkLabelData } from '../../dialogs/edit-bookmark-label';
+import { ExportFormat, WaveformExport, WaveformExportData } from '../../dialogs/waveform-export';
+import { ArchiveService } from '../../services/archive-service';
 
 
 @Component({

@@ -1,7 +1,7 @@
 import { Routes } from '@angular/router';
-import { Dashboard } from './dashboard/dashboard';
-import { Archive } from './archive/archive';
-import { Bookmarks } from './bookmarks/bookmarks';
+import { Dashboard } from './components/dashboard/dashboard';
+import { Archive } from './components/archive/archive';
+import { Bookmarks } from './components/bookmarks/bookmarks';
 
 
 export const routes: Routes = [

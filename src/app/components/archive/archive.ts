@@ -5,17 +5,17 @@ import { RouterModule, ActivatedRoute }         from '@angular/router';
 import { ChartModule }                          from 'primeng/chart';
 import { concat, of } from 'rxjs';
 import { catchError, toArray } from 'rxjs/operators';
-import { ArchiveService } from '../services/archive-service';
-import { BookmarkService }                      from '../services/bookmark-service';
-import { WaveformResponse } from '../entities/waveform-response';
-import { ArchiveEvent } from '../entities/archive-event';
-import { WaveformResult } from '../entities/waveform-result';
-import { Bookmark } from '../entities/bookmark';
+import { ArchiveService } from '../../services/archive-service';
+import { BookmarkService }                      from '../../services/bookmark-service';
+import { WaveformResponse } from '../../entities/waveform-response';
+import { ArchiveEvent } from '../../entities/archive-event';
+import { WaveformResult } from '../../entities/waveform-result';
+import { Bookmark } from '../../entities/bookmark';
 import { Chart } from 'chart.js';
 import zoomPlugin from 'chartjs-plugin-zoom';
-import { environment } from '../../environments/environment';
+import { environment } from '../../../environments/environment';
 import { DialogService, DynamicDialogRef } from 'primeng/dynamicdialog';
-import { ExportFormat, WaveformExport, WaveformExportData } from '../dialogs/waveform-export';
+import { ExportFormat, WaveformExport, WaveformExportData } from '../../dialogs/waveform-export';
 
 Chart.register(zoomPlugin);
 
