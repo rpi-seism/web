@@ -3,6 +3,7 @@ import { CommonModule }                         from '@angular/common';
 import { FormsModule }                          from '@angular/forms';
 import { RouterModule, ActivatedRoute }         from '@angular/router';
 import { ChartModule }                          from 'primeng/chart';
+import { DatePickerModule } from 'primeng/datepicker';
 import { concat, of } from 'rxjs';
 import { catchError, toArray } from 'rxjs/operators';
 import { ArchiveService } from '../../services/archive-service';
@@ -23,7 +24,7 @@ Chart.register(zoomPlugin);
   selector:    'app-archive',
   standalone:  true,
   templateUrl: './archive.html',
-  imports:     [CommonModule, FormsModule, ChartModule, RouterModule],
+  imports:     [CommonModule, FormsModule, ChartModule, RouterModule, DatePickerModule],
   providers:  [DialogService]
 })
 export class Archive implements OnInit {
@@ -38,7 +39,9 @@ export class Archive implements OnInit {
   bookmarkLabel: string     = '';
 
   selectedChannels: string[] = [];
-  selectedDate      = '';
+  selectedDate:     Date | null = null;
+  minDate:          Date | null = null;
+  maxDate:          Date | null = null;
   startTime         = '00:00:00';
   endTime           = '00:05:00';
   selectedUnits     = 'COUNTS';
@@ -52,6 +55,13 @@ export class Archive implements OnInit {
   waveformResults: WaveformResult[] = [];
 
   private dialogRef: DynamicDialogRef | null = null;
+
+  // Force UTC timezone for all date operations
+  readonly datePickerConfig = {
+    firstDayOfWeek: 1,
+    showTime: false,
+    utc: true,
+  };
 
   constructor(
     private archiveService:  ArchiveService,
@@ -98,18 +108,29 @@ export class Archive implements OnInit {
       next: days => {
         this.availableDays = days;
 
+        // Set min and max dates from available days (UTC)
+        if (days.length > 0) {
+          this.minDate = this.convertToUTC(new Date(days[0]));
+          this.maxDate = this.convertToUTC(new Date(days[days.length - 1]));
+        } else {
+          this.minDate = null;
+          this.maxDate = null;
+        }
+
         // honour query param date if available, otherwise latest day
         let paramDate = "";
         if (qp){
           paramDate = qp?.get('date');
         }
-        else {
-          paramDate = this.selectedDate;
+        else if (this.selectedDate) {
+          paramDate = this.formatDateToString(this.selectedDate);
         }
 
-        this.selectedDate = (paramDate && days.includes(paramDate))
+        const targetDate = (paramDate && days.includes(paramDate))
           ? paramDate
           : (days.at(-1) ?? '');
+
+        this.selectedDate = targetDate ? this.convertToUTC(new Date(targetDate)) : null;
 
         // apply remaining query params
         if (qp?.get('start')) this.startTime   = qp.get('start');
@@ -127,7 +148,9 @@ export class Archive implements OnInit {
       },
       error: () => {
         this.availableDays = [];
-        this.selectedDate  = '';
+        this.selectedDate  = null;
+        this.minDate       = null;
+        this.maxDate       = null;
         this.events        = [];
         this.cdref.detectChanges();
       },
@@ -138,8 +161,10 @@ export class Archive implements OnInit {
     if (!this.selectedChannels.length || !this.selectedDate) return;
 
     this.loadingEvents = true;
+    const dateString = this.formatDateToString(this.selectedDate);
+    
     const eventRequests = this.selectedChannels.map(ch =>
-      this.archiveService.getEvents(ch, this.selectedDate).pipe(
+      this.archiveService.getEvents(ch, dateString).pipe(
         catchError(() => of([] as any[]))
       )
     );
@@ -205,8 +230,10 @@ export class Archive implements OnInit {
     this.loadingWaveform = true;
     this.waveformResults = [];
 
-    const start    = `${this.selectedDate}T${this.startTime}Z`;
-    const end      = `${this.selectedDate}T${this.endTime}Z`;
+    const dateString = this.formatDateToString(this.selectedDate);
+    const start      = `${dateString}T${this.startTime}Z`;
+    const end        = `${dateString}T${this.endTime}Z`;
+    
     this.archiveService.getWaveforms(this.selectedChannels, start, end, this.selectedUnits).subscribe({
       next: ({ results, errors }) => {
         this.waveformResults = results.map(res => ({
@@ -251,14 +278,16 @@ export class Archive implements OnInit {
 
   filterDayBookmarks() {
     if (!this.selectedDate) { this.dayBookmarks = []; return; }
+    
+    const dateString = this.formatDateToString(this.selectedDate);
     this.dayBookmarks = this.allBookmarks
-      .filter(bm => bm.start.toISOString().substring(0, 10) === this.selectedDate)
+      .filter(bm => bm.start.toISOString().substring(0, 10) === dateString)
       .sort((a, b) => b.start.getTime() - a.start.getTime());
   }
 
   loadBookmark(bm: Bookmark) {
     this.selectedChannels = [...bm.channels];
-    this.selectedDate     = bm.start.toISOString().substring(0, 10);
+    this.selectedDate     = this.convertToUTC(bm.start);
     this.startTime        = bm.start.toISOString().substring(11, 19);
     this.endTime          = bm.end.toISOString().substring(11, 19);
     this.selectedUnits    = bm.units;
@@ -284,17 +313,17 @@ export class Archive implements OnInit {
 
       this.archiveService.exportWaveforms(bm.channels, bm.start.toISOString(), bm.end.toISOString(), bm.units, format);
     });
-    // ask for type of export in modal
   }
 
   saveBookmark() {
     if (!this.selectedChannels.length || !this.selectedDate) return;
 
+    const dateString = this.formatDateToString(this.selectedDate);
     const payload = {
-      label:    this.bookmarkLabel.trim() || `${this.selectedDate} ${this.startTime}`,
+      label:    this.bookmarkLabel.trim() || `${dateString} ${this.startTime}`,
       channels: [...this.selectedChannels],
-      start:    new Date(`${this.selectedDate}T${this.startTime}Z`),
-      end:      new Date(`${this.selectedDate}T${this.endTime}Z`),
+      start:    new Date(`${dateString}T${this.startTime}Z`),
+      end:      new Date(`${dateString}T${this.endTime}Z`),
       units:    this.selectedUnits,
     };
 
@@ -312,6 +341,38 @@ export class Archive implements OnInit {
         this.cdref.detectChanges();
       },
     });
+  }
+
+  /**
+   * Format Date object to YYYY-MM-DD string
+   */
+  formatDateToString(date: Date): string {
+    return date.toISOString().substring(0, 10);
+  }
+
+  getSelectedDateString(): string {
+    return this.selectedDate ? this.formatDateToString(this.selectedDate) : '';
+  }
+
+  private convertToUTC(date: Date): Date {
+    return new Date(Date.UTC(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    date.getHours(),
+    date.getMinutes(),
+    date.getSeconds()
+    ));
+  }
+
+  onDatePickerChange(event: Date) {
+    // Ensure the date is treated as UTC
+    if (event) {
+      this.selectedDate = this.convertToUTC(event);
+    } else {
+      this.selectedDate = null;
+    }
+    this.onDateChange();
   }
 
   //  chart helpers 

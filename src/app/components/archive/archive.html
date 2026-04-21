@@ -50,17 +50,19 @@
         <!-- Date -->
         <div class="flex flex-col gap-1">
           <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Date</label>
-          <select
-            [(ngModel)]="selectedDate"
-            (ngModelChange)="onDateChange()"
-            class="bg-slate-800 border border-slate-700 text-slate-200 text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-blue-500">
-            @for (day of availableDays; track day) {
-              <option [value]="day">{{ day }}</option>
-            }
-            @if (availableDays.length === 0) {
-              <option value="">No data available</option>
-            }
-          </select>
+          <div class="card flex justify-center">
+            <p-datepicker
+              [(ngModel)]="selectedDate"
+              (ngModelChange)="onDatePickerChange($event)"
+              [minDate]="minDate"
+              [maxDate]="maxDate"
+              dateFormat="yy-mm-dd"
+              [showIcon]="true"
+              [iconDisplay]="'input'"
+              placeholder="Select date"
+              [firstDayOfWeek]="1"
+            />
+          </div>
         </div>
 
         <!-- Start time -->
@@ -200,7 +202,7 @@
       <div class="bg-slate-900 rounded-3xl p-6 border border-slate-800 shadow-2xl flex flex-col gap-4">
         <div class="flex items-center justify-between">
           <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-            Bookmarks for {{ selectedDate || '—' }}
+            Bookmarks for {{ getSelectedDateString() || '—' }}
           </p>
           <a routerLink="/bookmarks"
              class="text-[10px] font-bold text-blue-400 hover:text-blue-300 uppercase tracking-widest transition-colors">
@@ -255,7 +257,7 @@
           <div class="text-xs font-mono text-slate-600 px-1 leading-relaxed">
             @if (selectedChannels.length && selectedDate) {
               <span class="text-slate-500">
-                {{ selectedDate }} · {{ startTime }} → {{ endTime }} UTC ·
+                {{ getSelectedDateString() }} · {{ startTime }} → {{ endTime }} UTC ·
                 <span class="text-blue-400/70">{{ selectedChannels.join(', ') }}</span> ·
                 {{ selectedUnits }}
               </span>
